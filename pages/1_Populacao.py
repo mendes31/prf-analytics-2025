@@ -3,17 +3,23 @@
 # PRF ANALYTICS 2025
 # DASHBOARD 1 - ANÁLISE DESCRITIVA DA POPULAÇÃO
 #
-# Streamlit + Plotly
-# População operacional: 72.529 acidentes
-# Fonte: Polícia Rodoviária Federal - 2025
+# Versão 1.1 - Melhorias de apresentação
+#
+# Ajustes:
+# - Eixos quantitativos com categorias discretas
+# - Fontes e percentuais mais legíveis
+# - Filtros e orientações em português
+# - Informações interativas aprimoradas
+# - Preservação dos cálculos estatísticos
 # ============================================================
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
+import plotly.graph_objects as go
 
 from pathlib import Path
+from textwrap import wrap
 
 
 # ============================================================
@@ -23,23 +29,25 @@ from pathlib import Path
 st.set_page_config(
     page_title="População | PRF Analytics 2025",
     page_icon="📊",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 COR_PRINCIPAL = "#1677C8"
-COR_SECUNDARIA = "#0F466E"
 COR_DESTAQUE = "#E58A2B"
+COR_TEXTO = "#253247"
+COR_GRADE = "#E9EDF2"
+
+TOTAL_ESPERADO = 72529
 
 ARQUIVO = (
     Path(__file__).resolve().parents[1]
     / "datatran2025.csv"
 )
 
-TOTAL_ESPERADO = 72529
-
 
 # ============================================================
-# 2. FUNÇÕES AUXILIARES
+# 2. FUNÇÕES DE FORMATAÇÃO
 # ============================================================
 
 def numero_br(valor, casas=0):
@@ -54,8 +62,24 @@ def numero_br(valor, casas=0):
 def percentual(parte, total):
     if total == 0:
         return 0.0
+
     return parte / total * 100
 
+
+def quebrar_rotulo(texto, largura=42):
+    partes = wrap(
+        str(texto),
+        width=largura,
+        break_long_words=False,
+        break_on_hyphens=False
+    )
+
+    return "<br>".join(partes) if partes else str(texto)
+
+
+# ============================================================
+# 3. CARREGAMENTO DA POPULAÇÃO
+# ============================================================
 
 @st.cache_data(show_spinner="Carregando dados da PRF...")
 def carregar_dados():
@@ -80,6 +104,7 @@ def carregar_dados():
 
     for coluna in numericas:
         if coluna in df.columns:
+
             df[coluna] = pd.to_numeric(
                 df[coluna],
                 errors="coerce"
@@ -92,6 +117,59 @@ def carregar_dados():
 
     return df
 
+
+# ============================================================
+# 4. ESTILO PADRÃO DOS GRÁFICOS
+# ============================================================
+
+def aplicar_estilo(fig, altura=430):
+
+    fig.update_layout(
+        template="plotly_white",
+        height=altura,
+        font=dict(
+            family="Arial",
+            size=13,
+            color=COR_TEXTO
+        ),
+        title_font=dict(
+            size=17,
+            color=COR_TEXTO
+        ),
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        showlegend=False,
+        hoverlabel=dict(
+            bgcolor="white",
+            font_size=14,
+            font_family="Arial"
+        ),
+        margin=dict(
+            l=20,
+            r=65,
+            t=65,
+            b=75
+        )
+    )
+
+    fig.update_xaxes(
+        showgrid=False,
+        zeroline=False,
+        tickfont=dict(size=12)
+    )
+
+    fig.update_yaxes(
+        gridcolor=COR_GRADE,
+        zeroline=False,
+        tickfont=dict(size=12)
+    )
+
+    return fig
+
+
+# ============================================================
+# 5. TABELA DE FREQUÊNCIAS QUALITATIVAS
+# ============================================================
 
 def tabela_frequencia(df, coluna):
 
@@ -119,6 +197,10 @@ def tabela_frequencia(df, coluna):
     return resultado
 
 
+# ============================================================
+# 6. GRÁFICOS QUALITATIVOS
+# ============================================================
+
 def grafico_qualitativo(
     df,
     coluna,
@@ -137,51 +219,94 @@ def grafico_qualitativo(
     tabela = tabela.sort_values(
         ["Percentual", "Categoria"],
         ascending=[True, True]
+    ).copy()
+
+    tabela["Rotulo"] = tabela["Categoria"].apply(
+        lambda x: quebrar_rotulo(x, 44)
     )
 
-    fig = px.bar(
-        tabela,
-        x="Percentual",
-        y="Categoria",
-        orientation="h",
-        text="Percentual",
-        color_discrete_sequence=[COR_PRINCIPAL],
-        custom_data=["Frequência"]
-    )
+    percentuais = tabela["Percentual"].tolist()
+    frequencias = tabela["Frequência"].tolist()
+    categorias = tabela["Categoria"].tolist()
 
-    fig.update_traces(
-        texttemplate="%{text:.2f}%",
-        textposition="outside",
-        cliponaxis=False,
-        hovertemplate=(
-            "<b>%{y}</b>"
-            "<br>Participação: %{x:.2f}%"
-            "<br>Ocorrências: %{customdata[0]}"
-            "<extra></extra>"
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Bar(
+            x=percentuais,
+            y=tabela["Rotulo"],
+            orientation="h",
+            marker=dict(
+                color=COR_PRINCIPAL
+            ),
+            text=[
+                numero_br(v, 2) + "%"
+                for v in percentuais
+            ],
+            textposition="outside",
+            textfont=dict(
+                size=13,
+                color=COR_TEXTO
+            ),
+            customdata=[
+                [categoria, int(freq)]
+                for categoria, freq
+                in zip(categorias, frequencias)
+            ],
+            hovertemplate=(
+                "<b>%{customdata[0]}</b>"
+                "<br>Participação: %{x:.2f}%"
+                "<br>Ocorrências: %{customdata[1]:,}"
+                "<extra></extra>"
+            ),
+            cliponaxis=False
         )
     )
 
-    maximo = tabela["Percentual"].max()
+    maximo = max(percentuais) if percentuais else 0
+
+    fig = aplicar_estilo(
+        fig,
+        altura=max(340, len(tabela) * 47 + 115)
+    )
 
     fig.update_layout(
-        title=titulo,
-        xaxis_title="% das ocorrências selecionadas",
-        yaxis_title=None,
-        height=max(310, len(tabela) * 39 + 110),
-        margin=dict(l=15, r=65, t=60, b=35),
-        xaxis=dict(
-            range=[0, max(1, maximo * 1.16)],
-            rangemode="tozero",
-            ticksuffix="%"
+        title=dict(
+            text=titulo,
+            x=0,
+            xanchor="left"
         ),
-        showlegend=False
+        xaxis=dict(
+            title="% dos acidentes selecionados",
+            range=[0, max(1, maximo * 1.16)],
+            ticksuffix="%",
+            gridcolor=COR_GRADE,
+            showgrid=True,
+            rangemode="tozero"
+        ),
+        yaxis=dict(
+            title=None,
+            showgrid=False,
+            type="category"
+        ),
+        margin=dict(
+            l=20,
+            r=90,
+            t=65,
+            b=60
+        )
     )
 
     st.plotly_chart(
         fig,
-        use_container_width=True
+        use_container_width=True,
+        config={"displaylogo": False}
     )
 
+
+# ============================================================
+# 7. GRÁFICOS QUANTITATIVOS DISCRETOS
+# ============================================================
 
 def grafico_quantitativo(
     df,
@@ -196,7 +321,8 @@ def grafico_quantitativo(
     ).dropna()
 
     categorias = [
-        str(i) for i in range(limite)
+        str(i)
+        for i in range(limite)
     ] + [f"{limite} ou mais"]
 
     grupos = serie.apply(
@@ -223,49 +349,74 @@ def grafico_quantitativo(
         else 0.0
     )
 
-    fig = px.bar(
-        tabela,
-        x="Categoria",
-        y="Percentual",
-        text="Percentual",
-        color_discrete_sequence=[COR_PRINCIPAL],
-        custom_data=["Frequência"]
-    )
+    fig = go.Figure()
 
-    fig.update_traces(
-        texttemplate="%{text:.1f}%",
-        textposition="outside",
-        cliponaxis=False,
-        hovertemplate=(
-            "<b>%{x}</b>"
-            "<br>Participação: %{y:.2f}%"
-            "<br>Ocorrências: %{customdata[0]}"
-            "<extra></extra>"
+    fig.add_trace(
+        go.Bar(
+            x=tabela["Categoria"],
+            y=tabela["Percentual"],
+            marker=dict(
+                color=COR_PRINCIPAL
+            ),
+            text=[
+                numero_br(v, 1) + "%"
+                for v in tabela["Percentual"]
+            ],
+            textposition="outside",
+            textfont=dict(
+                size=13,
+                color=COR_TEXTO
+            ),
+            customdata=tabela["Frequência"],
+            hovertemplate=(
+                "<b>Quantidade: %{x}</b>"
+                "<br>Participação: %{y:.2f}%"
+                "<br>Ocorrências: %{customdata:,}"
+                "<extra></extra>"
+            ),
+            cliponaxis=False
         )
     )
 
     maximo = tabela["Percentual"].max()
 
+    fig = aplicar_estilo(fig, altura=430)
+
     fig.update_layout(
-        title=titulo,
-        xaxis_title="Quantidade por acidente",
-        yaxis_title="% das ocorrências selecionadas",
-        height=410,
-        margin=dict(l=20, r=20, t=65, b=75),
-        yaxis=dict(
-            range=[0, max(1, maximo * 1.16)]
+        title=dict(
+            text=titulo,
+            x=0,
+            xanchor="left"
         ),
-        showlegend=False
+        xaxis=dict(
+            title="Quantidade por acidente",
+            type="category",
+            categoryorder="array",
+            categoryarray=categorias,
+            tickmode="array",
+            tickvals=categorias,
+            ticktext=categorias,
+            tickangle=-35,
+            showgrid=False
+        ),
+        yaxis=dict(
+            title="% dos acidentes selecionados",
+            range=[0, max(1, maximo * 1.17)],
+            gridcolor=COR_GRADE,
+            showgrid=True,
+            rangemode="tozero"
+        )
     )
 
     st.plotly_chart(
         fig,
-        use_container_width=True
+        use_container_width=True,
+        config={"displaylogo": False}
     )
 
 
 # ============================================================
-# 3. CARREGAMENTO E VALIDAÇÃO
+# 8. VALIDAÇÃO DOS DADOS
 # ============================================================
 
 try:
@@ -276,12 +427,16 @@ except Exception as erro:
     st.exception(erro)
     st.stop()
 
+
 if len(populacao) != TOTAL_ESPERADO:
+
     st.error(
         "A quantidade de registros não corresponde "
         "à população validada no Google Colab."
     )
+
     st.stop()
+
 
 colunas_necessarias = [
     "id",
@@ -306,15 +461,17 @@ ausentes = [
 ]
 
 if ausentes:
+
     st.error(
-        "Colunas não encontradas na base: "
+        "Colunas não encontradas: "
         + ", ".join(ausentes)
     )
+
     st.stop()
 
 
 # ============================================================
-# 4. CABEÇALHO
+# 9. CABEÇALHO
 # ============================================================
 
 st.title("📊 Análise descritiva da população")
@@ -323,14 +480,13 @@ st.markdown(
     """
     **PRF Analytics 2025**
 
-    Análise das ocorrências registradas nas
-    rodovias federais brasileiras.
+    Análise interativa dos acidentes registrados
+    nas rodovias federais brasileiras em 2025.
 
     **População operacional:** 72.529 acidentes.
 
-    Explore os indicadores utilizando os filtros.
-    Sem filtros, são apresentados os resultados
-    da população completa.
+    Utilize os filtros para explorar características
+    específicas das ocorrências.
     """
 )
 
@@ -338,14 +494,22 @@ st.divider()
 
 
 # ============================================================
-# 5. FILTROS INTERATIVOS
+# 10. FILTROS INTERATIVOS
 # ============================================================
 
 st.sidebar.title("PRF Analytics 2025")
+
 st.sidebar.markdown("### Filtros da população")
+
+st.sidebar.caption(
+    "Os filtros podem ser combinados. "
+    "Para visualizar a população completa, "
+    "deixe todos sem seleção."
+)
 
 
 def opcoes_filtro(coluna):
+
     return sorted(
         populacao[coluna]
         .dropna()
@@ -357,23 +521,28 @@ def opcoes_filtro(coluna):
 
 ufs = st.sidebar.multiselect(
     "Unidade federativa",
-    options=opcoes_filtro("uf")
+    options=opcoes_filtro("uf"),
+    placeholder="Selecione uma ou mais opções"
 )
 
 fases = st.sidebar.multiselect(
     "Fase do dia",
-    options=opcoes_filtro("fase_dia")
+    options=opcoes_filtro("fase_dia"),
+    placeholder="Selecione uma ou mais opções"
 )
 
 classificacoes = st.sidebar.multiselect(
     "Classificação do acidente",
-    options=opcoes_filtro("classificacao_acidente")
+    options=opcoes_filtro("classificacao_acidente"),
+    placeholder="Selecione uma ou mais opções"
 )
 
 tipos = st.sidebar.multiselect(
     "Tipo de acidente",
-    options=opcoes_filtro("tipo_acidente")
+    options=opcoes_filtro("tipo_acidente"),
+    placeholder="Selecione uma ou mais opções"
 )
+
 
 df = populacao.copy()
 
@@ -393,6 +562,7 @@ if classificacoes:
 if tipos:
     df = df[df["tipo_acidente"].isin(tipos)]
 
+
 filtros_ativos = any([
     bool(ufs),
     bool(fases),
@@ -400,16 +570,19 @@ filtros_ativos = any([
     bool(tipos)
 ])
 
+
 if df.empty:
+
     st.warning(
         "Nenhuma ocorrência corresponde "
         "aos filtros selecionados."
     )
+
     st.stop()
 
 
 # ============================================================
-# 6. CONTEXTO DOS FILTROS
+# 11. CONTEXTO DOS FILTROS
 # ============================================================
 
 if filtros_ativos:
@@ -418,7 +591,7 @@ if filtros_ativos:
         "Visualização filtrada: os resultados abaixo "
         "descrevem apenas as ocorrências selecionadas. "
         "Não representam os parâmetros da população "
-        "completa usados nos testes estatísticos."
+        "completa utilizados nos testes estatísticos."
     )
 
 else:
@@ -427,6 +600,7 @@ else:
         "Visualização da população completa: "
         "72.529 ocorrências."
     )
+
 
 st.caption(
     f"Registros selecionados: "
@@ -437,7 +611,7 @@ st.caption(
 
 
 # ============================================================
-# 7. INDICADORES PRINCIPAIS
+# 12. INDICADORES GERAIS
 # ============================================================
 
 st.subheader("Indicadores gerais")
@@ -455,6 +629,7 @@ acidentes_fatais = int(
 acidentes_feridos = int(
     (df["feridos"] > 0).sum()
 )
+
 
 c1, c2, c3, c4 = st.columns(4)
 
@@ -482,6 +657,7 @@ with c4:
         numero_br(total_feridos)
     )
 
+
 c5, c6, c7, c8 = st.columns(4)
 
 with c5:
@@ -500,7 +676,10 @@ with c7:
     st.metric(
         "Proporção com mortes",
         numero_br(
-            percentual(acidentes_fatais, total_acidentes),
+            percentual(
+                acidentes_fatais,
+                total_acidentes
+            ),
             2
         ) + "%"
     )
@@ -511,11 +690,12 @@ with c8:
         numero_br(acidentes_feridos)
     )
 
+
 st.divider()
 
 
 # ============================================================
-# 8. ESTATÍSTICAS DESCRITIVAS
+# 13. MEDIDAS ESTATÍSTICAS
 # ============================================================
 
 st.subheader("Medidas estatísticas")
@@ -549,6 +729,7 @@ for coluna in variaveis:
         "Máximo": serie.max()
     })
 
+
 estatisticas = pd.DataFrame(linhas)
 
 st.dataframe(
@@ -566,33 +747,36 @@ st.dataframe(
 )
 
 st.caption(
-    "Desvio-padrão calculado com ddof=0, "
-    "por se tratar da descrição do conjunto "
-    "populacional selecionado."
+    "Desvio-padrão calculado com ddof=0. "
+    "Com filtros, as medidas descrevem "
+    "o subconjunto de registros selecionados."
 )
 
 st.divider()
 
 
 # ============================================================
-# 9. DISTRIBUIÇÕES QUANTITATIVAS
+# 14. DISTRIBUIÇÕES QUANTITATIVAS
 # ============================================================
 
 st.subheader("Distribuições quantitativas")
 
 st.markdown(
     """
-    Os gráficos apresentam frequências relativas,
-    respeitando a natureza discreta das variáveis.
+    Os gráficos apresentam frequências relativas
+    com categorias discretas, preservando os
+    agrupamentos definidos na análise estatística.
 
-    Valores elevados foram reunidos nas categorias
-    finais, sem exclusão de registros.
+    As ocorrências com valores elevados estão
+    incluídas nas categorias finais, sem exclusão.
     """
 )
+
 
 q1, q2 = st.columns(2)
 
 with q1:
+
     grafico_quantitativo(
         df,
         "pessoas",
@@ -601,12 +785,14 @@ with q1:
     )
 
 with q2:
+
     grafico_quantitativo(
         df,
         "mortos",
         "Vítimas fatais",
         limite=4
     )
+
 
 grafico_quantitativo(
     df,
@@ -619,22 +805,23 @@ st.divider()
 
 
 # ============================================================
-# 10. DISTRIBUIÇÕES QUALITATIVAS
+# 15. DISTRIBUIÇÕES QUALITATIVAS
 # ============================================================
 
 st.subheader("Distribuições qualitativas")
 
 st.markdown(
     """
-    Os gráficos apresentam percentuais calculados
-    sobre o total de ocorrências selecionadas.
+    As frequências relativas foram calculadas
+    sobre o total de acidentes selecionados.
 
-    Para variáveis com muitas categorias, são exibidas
-    as dez categorias mais frequentes no conjunto
-    atualmente selecionado. As demais permanecem
-    incluídas no denominador.
+    Para variáveis com muitas categorias, os gráficos
+    apresentam as dez mais frequentes no conjunto
+    selecionado. As demais continuam incluídas
+    nos cálculos dos percentuais.
     """
 )
+
 
 grafico_qualitativo(
     df,
@@ -679,7 +866,7 @@ st.divider()
 
 
 # ============================================================
-# 11. TABELA DE FREQUÊNCIAS
+# 16. TABELA DE FREQUÊNCIAS
 # ============================================================
 
 st.subheader("Exploração das frequências")
@@ -692,6 +879,7 @@ colunas_categoricas = {
     "Unidade federativa": "uf",
     "Condição meteorológica": "condicao_metereologica"
 }
+
 
 selecionada = st.selectbox(
     "Selecione uma variável",
@@ -712,105 +900,126 @@ st.dataframe(
 )
 
 st.caption(
-    "A tabela apresenta todas as categorias, "
-    "inclusive aquelas omitidas dos gráficos Top 10."
+    "Todas as categorias são apresentadas "
+    "na tabela, inclusive aquelas que não "
+    "aparecem nos gráficos Top 10."
 )
 
 st.divider()
 
 
 # ============================================================
-# 12. REGISTROS DA BASE
+# 17. CONSULTA DOS REGISTROS
 # ============================================================
 
 with st.expander("Consultar registros selecionados"):
 
+    colunas_consulta = [
+        "id",
+        "data_inversa",
+        "uf",
+        "fase_dia",
+        "tipo_acidente",
+        "pessoas",
+        "mortos",
+        "feridos"
+    ]
+
     st.dataframe(
-        df[
-            [
-                "id",
-                "data_inversa",
-                "uf",
-                "fase_dia",
-                "tipo_acidente",
-                "pessoas",
-                "mortos",
-                "feridos"
-            ]
-        ].head(1000),
+        df[colunas_consulta].head(1000),
         use_container_width=True,
         hide_index=True
     )
 
     st.caption(
-        "Prévia limitada aos primeiros 1.000 registros "
-        "do conjunto selecionado."
+        "Prévia dos primeiros 1.000 registros "
+        "do conjunto atualmente selecionado."
     )
 
 
 # ============================================================
-# 13. METODOLOGIA
+# 18. METODOLOGIA
 # ============================================================
 
 with st.expander("Metodologia e limitações"):
 
     st.markdown(
         """
-        **Fonte**
+        **Fonte dos dados**
 
-        Polícia Rodoviária Federal — base de
+        Polícia Rodoviária Federal (PRF) —
         acidentes de trânsito de 2025.
 
         **População operacional**
 
-        72.529 ocorrências utilizadas no estudo.
+        72.529 ocorrências registradas na base
+        utilizada no estudo acadêmico.
 
         **Unidade de análise**
 
-        Uma ocorrência registrada.
+        Uma ocorrência de acidente.
+
+        **Variáveis quantitativas**
+
+        Pessoas envolvidas, mortes, feridos,
+        feridos leves, feridos graves e veículos.
 
         **Estatísticas descritivas**
 
-        Médias, medianas, quartis, valores extremos
-        e desvios-padrão populacionais.
+        Média, mediana, quartis, valores extremos
+        e desvio-padrão populacional.
 
-        **Frequências**
+        **Distribuições quantitativas**
 
-        Frequências absolutas e relativas para
-        variáveis qualitativas e quantitativas discretas.
+        Foram utilizados gráficos de barras,
+        respeitando a natureza discreta das
+        variáveis de contagem.
 
-        **Filtros**
+        Os agrupamentos finais foram mantidos
+        conforme o estudo no Google Colab:
 
-        Os filtros permitem explorar subconjuntos
-        da população operacional.
+        - Pessoas: 10 ou mais;
+        - Mortos: 4 ou mais;
+        - Feridos: 6 ou mais.
 
-        Os indicadores filtrados não substituem
-        os parâmetros populacionais definidos no
-        estudo inferencial.
+        **Distribuições qualitativas**
+
+        Frequências absolutas e relativas,
+        utilizando gráficos de barras horizontais.
+
+        **Interatividade**
+
+        Os filtros possibilitam explorar
+        subconjuntos da população.
+
+        Resultados filtrados não substituem
+        os parâmetros populacionais utilizados
+        nos procedimentos inferenciais.
 
         **Limitações**
 
-        As frequências representam a distribuição
-        dos registros, não taxas de risco.
+        As frequências dos registros não
+        representam automaticamente taxas de
+        risco rodoviário.
 
-        Comparações entre estados, horários ou
-        condições meteorológicas não consideram
-        necessariamente a exposição ao tráfego.
+        Comparações entre estados e períodos
+        não consideram necessariamente
+        diferenças de exposição ao tráfego.
 
-        As causas são classificações registradas
-        pela PRF e não demonstram, isoladamente,
-        relações causais adicionais.
+        As causas apresentadas correspondem
+        às classificações registradas pela PRF.
         """
     )
 
 
 # ============================================================
-# 14. RODAPÉ
+# 19. RODAPÉ
 # ============================================================
 
 st.divider()
 
 st.caption(
-    "PRF Analytics 2025 | Dashboard 1 — População | "
+    "PRF Analytics 2025 | "
+    "Dashboard 1 — Análise descritiva da população | "
     "Probabilidade e Estatística para IA"
 )
