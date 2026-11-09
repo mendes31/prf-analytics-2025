@@ -3,8 +3,8 @@
 # PRF ANALYTICS 2025
 # Probabilidade e Estatística para IA
 #
-# Aplicação Streamlit - Versão 1.1
-# Validação inicial das bases de dados
+# Aplicação Streamlit - Versão 1.2
+# Validação das bases populacional e amostral
 # ============================================================
 
 import streamlit as st
@@ -60,17 +60,12 @@ st.divider()
 
 DIRETORIO = Path(__file__).resolve().parent
 
-ARQUIVO_POPULACAO = (
-    DIRETORIO / "datatran2025.csv"
-)
-
-ARQUIVO_AMOSTRA = (
-    DIRETORIO / "amostra_PRF_2025.csv"
-)
+ARQUIVO_POPULACAO = DIRETORIO / "datatran2025.csv"
+ARQUIVO_AMOSTRA = DIRETORIO / "amostra_PRF_2025.csv"
 
 
 # ============================================================
-# 4. CARREGAMENTO DOS DADOS
+# 4. CARREGAMENTO DA POPULAÇÃO
 # ============================================================
 
 @st.cache_data(show_spinner="Carregando população...")
@@ -83,36 +78,70 @@ def carregar_populacao():
         low_memory=False
     )
 
-    return dados
-
-
-@st.cache_data(show_spinner="Carregando amostra...")
-def carregar_amostra():
-
-    # Formato padrão de exportação do Pandas
-    dados = pd.read_csv(
-        ARQUIVO_AMOSTRA,
-        sep=",",
-        encoding="utf-8-sig",
-        low_memory=False
-    )
-
-    # Caso o arquivo tenha outro separador,
-    # tentar identificar automaticamente.
-    if len(dados.columns) == 1:
-
-        dados = pd.read_csv(
-            ARQUIVO_AMOSTRA,
-            sep=None,
-            engine="python",
-            encoding="utf-8-sig"
-        )
+    dados.columns = dados.columns.str.strip()
 
     return dados
 
 
 # ============================================================
-# 5. CARREGAMENTO E TRATAMENTO DE ERROS
+# 5. CARREGAMENTO DA AMOSTRA
+# ============================================================
+
+@st.cache_data(show_spinner="Carregando amostra...")
+def carregar_amostra():
+
+    erros = []
+
+    # Testar formatos comuns de exportação CSV
+    for encoding in ["utf-8-sig", "latin1"]:
+
+        for separador in [",", ";", "\t"]:
+
+            try:
+
+                dados = pd.read_csv(
+                    ARQUIVO_AMOSTRA,
+                    sep=separador,
+                    encoding=encoding,
+                    low_memory=False
+                )
+
+                dados.columns = dados.columns.str.strip()
+
+                # Validar dimensões antes de aceitar
+                if (
+                    len(dados) == 383
+                    and len(dados.columns) == 30
+                    and "id" in dados.columns
+                ):
+                    return dados
+
+                erros.append(
+                    f"Separador {repr(separador)}, "
+                    f"codificação {encoding}: "
+                    f"{len(dados)} registros e "
+                    f"{len(dados.columns)} colunas."
+                )
+
+            except (
+                pd.errors.ParserError,
+                UnicodeError
+            ) as erro:
+
+                erros.append(
+                    f"Separador {repr(separador)}, "
+                    f"codificação {encoding}: {erro}"
+                )
+
+    raise ValueError(
+        "Não foi possível identificar o formato "
+        "correto do CSV da amostra.\n"
+        + "\n".join(erros)
+    )
+
+
+# ============================================================
+# 6. CARREGAMENTO E TRATAMENTO DE ERROS
 # ============================================================
 
 try:
@@ -133,7 +162,7 @@ except Exception as erro:
 
 
 # ============================================================
-# 6. INDICADORES GERAIS
+# 7. INDICADORES GERAIS
 # ============================================================
 
 st.subheader("Visão geral do estudo")
@@ -141,18 +170,21 @@ st.subheader("Visão geral do estudo")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
+
     st.metric(
         label="População",
         value=f"{len(populacao):,}".replace(",", ".")
     )
 
 with col2:
+
     st.metric(
         label="Amostra",
         value=f"{len(amostra):,}".replace(",", ".")
     )
 
 with col3:
+
     fracao_amostral = (
         len(amostra) / len(populacao) * 100
     )
@@ -163,6 +195,7 @@ with col3:
     )
 
 with col4:
+
     st.metric(
         label="Nível de confiança",
         value="95%"
@@ -170,7 +203,7 @@ with col4:
 
 
 # ============================================================
-# 7. VALIDAÇÃO DAS BASES
+# 8. VALIDAÇÃO DAS BASES
 # ============================================================
 
 st.divider()
@@ -185,20 +218,19 @@ st.markdown(
     """
 )
 
-# Dimensões
 total_populacao = len(populacao)
 total_amostra = len(amostra)
 
 variaveis_populacao = len(populacao.columns)
 variaveis_amostra = len(amostra.columns)
 
-# Verificação das colunas
+# Verificar nomes das colunas
 colunas_iguais = (
     set(populacao.columns)
     == set(amostra.columns)
 )
 
-# Verificação dos identificadores
+# Verificar existência do identificador
 coluna_id_existe = (
     "id" in populacao.columns
     and "id" in amostra.columns
@@ -233,7 +265,7 @@ else:
 
 
 # ============================================================
-# 8. TABELA DE VALIDAÇÃO
+# 9. TABELA DE VALIDAÇÃO
 # ============================================================
 
 validacoes = [
@@ -285,7 +317,10 @@ tabela_validacao = pd.DataFrame(validacoes)
 
 tabela_validacao["Situação"] = (
     tabela_validacao["Aprovado"].map(
-        {True: "✅ Aprovado", False: "❌ Verificar"}
+        {
+            True: "✅ Aprovado",
+            False: "❌ Verificar"
+        }
     )
 )
 
@@ -304,7 +339,7 @@ st.dataframe(
 
 
 # ============================================================
-# 9. RESULTADO DA VALIDAÇÃO
+# 10. RESULTADO DA VALIDAÇÃO
 # ============================================================
 
 total_verificacoes = len(tabela_validacao)
@@ -318,21 +353,19 @@ if verificacoes_aprovadas == total_verificacoes:
     st.success(
         "Validação concluída com sucesso! "
         "As bases apresentam as dimensões esperadas, "
-        "as mesmas variáveis e os identificadores "
-        "da amostra são válidos."
+        "as mesmas variáveis e identificadores válidos."
     )
 
 else:
 
     st.warning(
         f"Foram aprovadas {verificacoes_aprovadas} "
-        f"de {total_verificacoes} verificações. "
-        "Revise os itens sinalizados."
+        f"de {total_verificacoes} verificações."
     )
 
 
 # ============================================================
-# 10. VISUALIZAÇÃO DOS PRIMEIROS REGISTROS
+# 11. VISUALIZAÇÃO DOS PRIMEIROS REGISTROS
 # ============================================================
 
 st.divider()
@@ -365,7 +398,7 @@ with aba_amostra:
 
 
 # ============================================================
-# 11. INFORMAÇÕES METODOLÓGICAS
+# 12. INFORMAÇÕES METODOLÓGICAS
 # ============================================================
 
 st.divider()
@@ -398,11 +431,9 @@ with st.expander("Informações metodológicas"):
 
         **Dimensionamento**
 
-        Nível de confiança: 95%.
-
-        Margem de erro utilizada: 5%.
-
-        Proporção conservadora: 50%.
+        - Nível de confiança: 95%.
+        - Margem de erro: 5%.
+        - Proporção conservadora: 50%.
 
         **Reprodutibilidade**
 
@@ -415,13 +446,13 @@ with st.expander("Informações metodológicas"):
 
 
 # ============================================================
-# 12. RODAPÉ
+# 13. RODAPÉ
 # ============================================================
 
 st.divider()
 
 st.caption(
     "PRF Analytics 2025 | "
-    "Projeto acadêmico de Probabilidade e Estatística para IA | "
-    "Fonte: Polícia Rodoviária Federal"
+    "Projeto acadêmico de Probabilidade e Estatística "
+    "para IA | Fonte: Polícia Rodoviária Federal"
 )
