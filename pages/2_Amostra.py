@@ -2,16 +2,14 @@
 # ============================================================
 # PRF ANALYTICS 2025
 # DASHBOARD 2 - ANALISE DESCRITIVA DA AMOSTRA
-#
-# Versao 1.0
-# Streamlit + Plotly
+# Versao 1.1 - Boxplots e compatibilidade Streamlit
 #
 # Populacao operacional: 72.529 acidentes
 # Amostra aleatoria simples: 383 acidentes
-# Semente do sorteio original: 42
+# Semente documentada do sorteio original: 42
 #
-# A amostra nao sera sorteada novamente.
-# Todos os indicadores sao calculados com a amostra.
+# A amostra NAO e sorteada novamente.
+# Todos os indicadores amostrais usam o CSV original.
 # ============================================================
 
 import streamlit as st
@@ -35,6 +33,7 @@ st.set_page_config(
 )
 
 COR_PRINCIPAL = "#1677C8"
+COR_DESTAQUE = "#E58A2B"
 COR_TEXTO = "#253247"
 COR_GRADE = "#E9EDF2"
 
@@ -44,13 +43,8 @@ SEMENTE_ORIGINAL = 42
 
 DIRETORIO = Path(__file__).resolve().parents[1]
 
-ARQUIVO_AMOSTRA = (
-    DIRETORIO / "amostra_PRF_2025.csv"
-)
-
-ARQUIVO_POPULACAO = (
-    DIRETORIO / "datatran2025.csv"
-)
+ARQUIVO_AMOSTRA = DIRETORIO / "amostra_PRF_2025.csv"
+ARQUIVO_POPULACAO = DIRETORIO / "datatran2025.csv"
 
 
 # ============================================================
@@ -58,9 +52,7 @@ ARQUIVO_POPULACAO = (
 # ============================================================
 
 def numero_br(valor, casas=0):
-
     texto = f"{valor:,.{casas}f}"
-
     return (
         texto.replace(",", "X")
         .replace(".", ",")
@@ -69,27 +61,20 @@ def numero_br(valor, casas=0):
 
 
 def percentual(parte, total):
-
-    if total == 0:
-        return 0.0
-
-    return parte / total * 100
+    return parte / total * 100 if total else 0.0
 
 
 def quebrar_rotulo(texto, largura=44):
-
     partes = wrap(
         str(texto),
         width=largura,
         break_long_words=False,
         break_on_hyphens=False
     )
-
     return "<br>".join(partes) if partes else str(texto)
 
 
 def normalizar_categoria(serie):
-
     return (
         serie.fillna("Não informado")
         .astype(str)
@@ -98,9 +83,8 @@ def normalizar_categoria(serie):
     )
 
 
-def tabela_frequencia(df, coluna):
-
-    serie = normalizar_categoria(df[coluna])
+def tabela_frequencia(dados, coluna):
+    serie = normalizar_categoria(dados[coluna])
 
     resultado = (
         serie.value_counts(dropna=False)
@@ -109,29 +93,24 @@ def tabela_frequencia(df, coluna):
     )
 
     resultado["Percentual"] = (
-        resultado["Frequência"] / len(df) * 100
-        if len(df) > 0
-        else 0.0
+        resultado["Frequência"] / len(dados) * 100
+        if len(dados) else 0.0
     )
 
     return resultado
 
 
 # ============================================================
-# 3. CARREGAMENTO DOS DADOS
+# 3. CARREGAMENTO DOS ARQUIVOS
 # ============================================================
 
 @st.cache_data(show_spinner="Carregando amostra PRF 2025...")
 def carregar_amostra():
-
     erros = []
 
     for encoding in ["utf-8-sig", "latin1"]:
-
         for separador in [",", ";", "\t"]:
-
             try:
-
                 dados = pd.read_csv(
                     ARQUIVO_AMOSTRA,
                     sep=separador,
@@ -149,9 +128,8 @@ def carregar_amostra():
                     return dados
 
                 erros.append(
-                    f"Separador {repr(separador)}, "
-                    f"codificacao {encoding}: "
-                    f"{len(dados)} registros e "
+                    f"{encoding}, separador {repr(separador)}: "
+                    f"{len(dados)} linhas e "
                     f"{len(dados.columns)} colunas."
                 )
 
@@ -159,27 +137,25 @@ def carregar_amostra():
                 pd.errors.ParserError,
                 UnicodeError
             ) as erro:
-
                 erros.append(str(erro))
 
     raise ValueError(
-        "Formato do CSV da amostra nao identificado.\n"
+        "Formato do CSV da amostra não identificado.\n"
         + "\n".join(erros)
     )
 
 
-@st.cache_data(show_spinner="Carregando referências populacionais...")
+@st.cache_data(
+    show_spinner="Carregando referências populacionais..."
+)
 def carregar_populacao():
-
     dados = pd.read_csv(
         ARQUIVO_POPULACAO,
         sep=";",
         encoding="latin1",
         low_memory=False
     )
-
     dados.columns = dados.columns.str.strip()
-
     return dados
 
 
@@ -188,34 +164,23 @@ def carregar_populacao():
 # ============================================================
 
 try:
-
     amostra = carregar_amostra()
     populacao = carregar_populacao()
 
 except Exception as erro:
-
     st.error("Erro ao carregar os arquivos CSV.")
     st.exception(erro)
     st.stop()
 
-
 if len(amostra) != N_AMOSTRA:
-
-    st.error(
-        "A amostra nao possui os 383 registros "
-        "esperados."
-    )
+    st.error("A amostra não possui os 383 registros esperados.")
     st.stop()
-
 
 if len(populacao) != N_POPULACAO:
-
     st.error(
-        "A populacao nao possui os 72.529 registros "
-        "esperados."
+        "A população não possui os 72.529 registros esperados."
     )
     st.stop()
-
 
 colunas_necessarias = [
     "id",
@@ -235,22 +200,19 @@ colunas_necessarias = [
 ]
 
 ausentes = [
-    c for c in colunas_necessarias
-    if c not in amostra.columns
-    or c not in populacao.columns
+    coluna for coluna in colunas_necessarias
+    if (
+        coluna not in amostra.columns
+        or coluna not in populacao.columns
+    )
 ]
 
 if ausentes:
-
     st.error(
-        "Variaveis ausentes nos arquivos: "
+        "Variáveis ausentes nos arquivos: "
         + ", ".join(ausentes)
     )
-
     st.stop()
-
-
-# Verificar IDs sem alterar a amostra.
 
 ids_populacao = pd.to_numeric(
     populacao["id"],
@@ -262,24 +224,22 @@ ids_amostra = pd.to_numeric(
     errors="coerce"
 )
 
-ids_validos = (
+ids_unicos = bool(ids_amostra.is_unique)
+ids_presentes = bool(
+    ids_amostra.isin(ids_populacao).all()
+)
+
+ids_validos = bool(
     ids_amostra.notna().all()
-    and ids_amostra.is_unique
-    and ids_amostra.isin(ids_populacao).all()
+    and ids_unicos
+    and ids_presentes
 )
 
 if not ids_validos:
-
     st.error(
-        "Falha na validacao dos identificadores "
-        "da amostra."
+        "Falha na validação dos identificadores da amostra."
     )
-
     st.stop()
-
-
-# Conversao das variaveis quantitativas.
-# Nao altera a selecao dos registros.
 
 variaveis_numericas = [
     "pessoas",
@@ -291,17 +251,36 @@ variaveis_numericas = [
 ]
 
 for coluna in variaveis_numericas:
-
     amostra[coluna] = pd.to_numeric(
         amostra[coluna],
         errors="coerce"
     )
 
-
 amostra["data_inversa"] = pd.to_datetime(
     amostra["data_inversa"],
     errors="coerce"
 )
+
+# Conferência dos resultados do Colab, sem novo sorteio.
+indicadores_conferidos = bool(
+    int(amostra["pessoas"].sum()) == 1051
+    and int(amostra["feridos"].sum()) == 486
+    and int((amostra["mortos"] > 0).sum()) == 24
+    and int(
+        (
+            amostra["fase_dia"]
+            .astype(str)
+            .str.strip() == "Plena Noite"
+        ).sum()
+    ) == 121
+)
+
+if not indicadores_conferidos:
+    st.error(
+        "Os indicadores da amostra divergem dos resultados "
+        "validados no Google Colab. Confira o CSV original."
+    )
+    st.stop()
 
 
 # ============================================================
@@ -309,7 +288,6 @@ amostra["data_inversa"] = pd.to_datetime(
 # ============================================================
 
 def aplicar_estilo(fig, altura=430):
-
     fig.update_layout(
         template="plotly_white",
         height=altura,
@@ -356,15 +334,9 @@ def aplicar_estilo(fig, altura=430):
 # 6. GRAFICOS QUANTITATIVOS
 # ============================================================
 
-def grafico_quantitativo(
-    df,
-    coluna,
-    titulo,
-    limite
-):
-
+def grafico_quantitativo(dados, coluna, titulo, limite):
     serie = pd.to_numeric(
-        df[coluna],
+        dados[coluna],
         errors="coerce"
     ).dropna()
 
@@ -391,9 +363,8 @@ def grafico_quantitativo(
     })
 
     tabela["Percentual"] = (
-        tabela["Frequência"] / len(df) * 100
-        if len(df) > 0
-        else 0.0
+        tabela["Frequência"] / len(dados) * 100
+        if len(dados) else 0.0
     )
 
     fig = go.Figure()
@@ -423,16 +394,11 @@ def grafico_quantitativo(
         )
     )
 
-    maximo = tabela["Percentual"].max()
-
+    maximo = float(tabela["Percentual"].max())
     fig = aplicar_estilo(fig)
 
     fig.update_layout(
-        title=dict(
-            text=titulo,
-            x=0,
-            xanchor="left"
-        ),
+        title=dict(text=titulo, x=0),
         xaxis=dict(
             title="Quantidade por acidente",
             type="category",
@@ -455,7 +421,7 @@ def grafico_quantitativo(
 
     st.plotly_chart(
         fig,
-        use_container_width=True,
+        width="stretch",
         config={"displaylogo": False}
     )
 
@@ -465,38 +431,30 @@ def grafico_quantitativo(
 # ============================================================
 
 def grafico_qualitativo(
-    df,
+    dados,
     coluna,
     titulo,
     top_n=None
 ):
+    tabela_amostra = tabela_frequencia(dados, coluna)
 
-    tabela_amostra = tabela_frequencia(
-        df,
-        coluna
-    )
-
-    # As categorias de referencia sao escolhidas
-    # com base na populacao completa.
-    # Os percentuais sao exclusivamente amostrais.
-
+    # Categorias de referencia definidas pela populacao.
+    # Os percentuais continuam exclusivamente amostrais.
     tabela_populacao = tabela_frequencia(
         populacao,
         coluna
     )
 
     if top_n is not None:
-
         categorias_referencia = (
             tabela_populacao["Categoria"]
             .head(top_n)
             .tolist()
         )
-
     else:
-
         categorias_referencia = (
-            tabela_populacao["Categoria"].tolist()
+            tabela_populacao["Categoria"]
+            .tolist()
         )
 
     tabela = (
@@ -509,16 +467,13 @@ def grafico_qualitativo(
         .reset_index()
     )
 
-    # A ordenacao visual considera a AMOSTRA,
-    # mas preserva as categorias populacionais.
-
     tabela = tabela.sort_values(
         ["Percentual", "Categoria"],
         ascending=[True, True]
     ).copy()
 
     tabela["Rotulo"] = tabela["Categoria"].apply(
-        lambda x: quebrar_rotulo(x, 44)
+        lambda valor: quebrar_rotulo(valor, 44)
     )
 
     fig = go.Figure()
@@ -555,7 +510,7 @@ def grafico_qualitativo(
         )
     )
 
-    maximo = tabela["Percentual"].max()
+    maximo = float(tabela["Percentual"].max())
 
     fig = aplicar_estilo(
         fig,
@@ -563,11 +518,7 @@ def grafico_qualitativo(
     )
 
     fig.update_layout(
-        title=dict(
-            text=titulo,
-            x=0,
-            xanchor="left"
-        ),
+        title=dict(text=titulo, x=0),
         xaxis=dict(
             title="% dos acidentes selecionados",
             range=[0, max(1, maximo * 1.16)],
@@ -591,13 +542,187 @@ def grafico_qualitativo(
 
     st.plotly_chart(
         fig,
-        use_container_width=True,
+        width="stretch",
         config={"displaylogo": False}
     )
 
 
 # ============================================================
-# 8. CABECALHO
+# 8. BOXPLOTS - ETAPA 13.1 DO COLAB
+# ============================================================
+
+def resumo_boxplot(dados, coluna, descricao):
+    valores = pd.to_numeric(
+        dados[coluna],
+        errors="coerce"
+    ).dropna()
+
+    if valores.empty:
+        return None
+
+    q1 = float(valores.quantile(0.25))
+    mediana = float(valores.median())
+    q3 = float(valores.quantile(0.75))
+
+    aiq = q3 - q1
+
+    limite_inferior = q1 - 1.5 * aiq
+    limite_superior = q3 + 1.5 * aiq
+
+    regulares = valores[
+        (valores >= limite_inferior)
+        & (valores <= limite_superior)
+    ]
+
+    atipicos = (
+        (valores < limite_inferior)
+        | (valores > limite_superior)
+    )
+
+    return {
+        "Variável": descricao,
+        "Observações": int(len(valores)),
+        "Média": float(valores.mean()),
+        "Q1": q1,
+        "Mediana": mediana,
+        "Q3": q3,
+        "AIQ": aiq,
+        "Limite inferior": limite_inferior,
+        "Limite superior": limite_superior,
+        "Bigode inferior": float(regulares.min()),
+        "Bigode superior": float(regulares.max()),
+        "Mínimo": float(valores.min()),
+        "Máximo": float(valores.max()),
+        "Atípicos": int(atipicos.sum()),
+        "Atípicos (%)": float(atipicos.mean() * 100)
+    }
+
+
+def grafico_boxplot(
+    dados,
+    coluna,
+    descricao,
+    exibir_atipicos
+):
+    valores = pd.to_numeric(
+        dados[coluna],
+        errors="coerce"
+    ).dropna()
+
+    if valores.empty:
+        st.info("Não existem dados válidos.")
+        return
+
+    resumo = resumo_boxplot(
+        dados,
+        coluna,
+        descricao
+    )
+
+    q1 = resumo["Q1"]
+    mediana = resumo["Mediana"]
+    q3 = resumo["Q3"]
+
+    limite_inferior = resumo["Limite inferior"]
+    limite_superior = resumo["Limite superior"]
+
+    fig = go.Figure()
+
+    # Quartis e bigodes explicitamente definidos.
+    # Ocultar pontos nao estende os bigodes aos maximos.
+    fig.add_trace(
+        go.Box(
+            x=[0.0],
+            q1=[q1],
+            median=[mediana],
+            q3=[q3],
+            lowerfence=[resumo["Bigode inferior"]],
+            upperfence=[resumo["Bigode superior"]],
+            name=descricao,
+            boxpoints=False,
+            line=dict(
+                color=COR_PRINCIPAL,
+                width=2
+            ),
+            fillcolor="rgba(22,119,200,0.25)",
+            boxmean=False
+        )
+    )
+
+    if exibir_atipicos:
+        extremos = valores[
+            (valores < limite_inferior)
+            | (valores > limite_superior)
+        ].to_numpy(dtype=float)
+
+        if len(extremos):
+            # Jitter exclusivamente visual.
+            # A amostra NAO sofre nenhum novo sorteio.
+            gerador = np.random.default_rng(2025)
+
+            posicoes = gerador.uniform(
+                -0.17,
+                0.17,
+                len(extremos)
+            )
+
+            fig.add_trace(
+                go.Scatter(
+                    x=posicoes,
+                    y=extremos,
+                    mode="markers",
+                    marker=dict(
+                        color=COR_DESTAQUE,
+                        size=7,
+                        opacity=0.65
+                    ),
+                    name="Valores potencialmente atípicos",
+                    hovertemplate=(
+                        "Quantidade: %{y:.0f}"
+                        "<extra></extra>"
+                    )
+                )
+            )
+
+    fig = aplicar_estilo(
+        fig,
+        altura=480
+    )
+
+    fig.update_layout(
+        title=dict(
+            text=descricao,
+            x=0
+        ),
+        showlegend=False,
+        margin=dict(
+            l=35,
+            r=30,
+            t=65,
+            b=45
+        )
+    )
+
+    fig.update_yaxes(
+        title="Quantidade por acidente",
+        rangemode="tozero"
+    )
+
+    fig.update_xaxes(
+        title=None,
+        range=[-0.40, 0.40],
+        showticklabels=False
+    )
+
+    st.plotly_chart(
+        fig,
+        width="stretch",
+        config={"displaylogo": False}
+    )
+
+
+# ============================================================
+# 9. CABECALHO
 # ============================================================
 
 st.title("📊 Análise descritiva da amostra")
@@ -615,7 +740,8 @@ st.markdown(
     **Semente utilizada no sorteio original:** 42.
 
     Os resultados desta página são calculados
-    exclusivamente a partir da amostra preservada.
+    exclusivamente com os registros da amostra
+    original preservada.
     """
 )
 
@@ -623,11 +749,10 @@ st.divider()
 
 
 # ============================================================
-# 9. FILTROS INTERATIVOS
+# 10. FILTROS INTERATIVOS
 # ============================================================
 
 st.sidebar.title("PRF Analytics 2025")
-
 st.sidebar.markdown("### Filtros da amostra")
 
 st.sidebar.caption(
@@ -638,7 +763,6 @@ st.sidebar.caption(
 
 
 def opcoes_filtro(coluna):
-
     return sorted(
         amostra[coluna]
         .dropna()
@@ -672,7 +796,6 @@ tipos = st.sidebar.multiselect(
     placeholder="Selecione uma ou mais opções"
 )
 
-
 df = amostra.copy()
 
 if ufs:
@@ -691,7 +814,6 @@ if classificacoes:
 if tipos:
     df = df[df["tipo_acidente"].isin(tipos)]
 
-
 filtros_ativos = any([
     bool(ufs),
     bool(fases),
@@ -699,37 +821,30 @@ filtros_ativos = any([
     bool(tipos)
 ])
 
-
 if df.empty:
-
     st.warning(
         "Nenhuma ocorrência da amostra corresponde "
         "aos filtros selecionados."
     )
-
     st.stop()
 
 
 # ============================================================
-# 10. CONTEXTO DA VISUALIZACAO
+# 11. CONTEXTO DA VISUALIZACAO
 # ============================================================
 
 if filtros_ativos:
-
     st.warning(
-        "Visualização filtrada: os indicadores "
-        "descrevem somente os registros selecionados "
-        "da amostra. Não substituem as estimativas "
+        "Visualização filtrada: os indicadores descrevem "
+        "somente os registros selecionados da amostra. "
+        "Não substituem as estimativas inferenciais "
         "calculadas com os 383 registros originais."
     )
-
 else:
-
     st.success(
         "Visualização da amostra original completa: "
         "383 ocorrências."
     )
-
 
 st.caption(
     f"Registros selecionados: "
@@ -740,7 +855,7 @@ st.caption(
 
 
 # ============================================================
-# 11. INDICADORES GERAIS
+# 12. INDICADORES GERAIS
 # ============================================================
 
 st.subheader("Indicadores gerais da amostra")
@@ -758,7 +873,6 @@ acidentes_fatais = int(
 acidentes_feridos = int(
     (df["feridos"] > 0).sum()
 )
-
 
 c1, c2, c3, c4 = st.columns(4)
 
@@ -785,7 +899,6 @@ with c4:
         "Pessoas feridas",
         numero_br(total_feridos)
     )
-
 
 c5, c6, c7, c8 = st.columns(4)
 
@@ -819,12 +932,11 @@ with c8:
         numero_br(acidentes_feridos)
     )
 
-
 st.divider()
 
 
 # ============================================================
-# 12. ESTATISTICAS DESCRITIVAS DA AMOSTRA
+# 13. MEDIDAS ESTATISTICAS AMOSTRAIS
 # ============================================================
 
 st.subheader("Medidas estatísticas amostrais")
@@ -841,7 +953,6 @@ variaveis = [
 linhas = []
 
 for coluna in variaveis:
-
     serie = df[coluna].dropna()
 
     linhas.append({
@@ -858,7 +969,6 @@ for coluna in variaveis:
         "Máximo": serie.max()
     })
 
-
 estatisticas = pd.DataFrame(linhas)
 
 st.dataframe(
@@ -871,14 +981,14 @@ st.dataframe(
         "3º quartil": "{:.2f}",
         "Máximo": "{:.0f}"
     }),
-    use_container_width=True,
+    width="stretch",
     hide_index=True
 )
 
 st.caption(
     "Desvio-padrão amostral calculado com ddof=1, "
     "utilizando o denominador n - 1. "
-    "As medidas são recalculadas quando filtros "
+    "As medidas são recalculadas quando os filtros "
     "são aplicados."
 )
 
@@ -886,7 +996,7 @@ st.divider()
 
 
 # ============================================================
-# 13. DISTRIBUICOES QUANTITATIVAS
+# 14. DISTRIBUICOES QUANTITATIVAS
 # ============================================================
 
 st.subheader("Distribuições quantitativas")
@@ -905,11 +1015,9 @@ st.markdown(
     """
 )
 
-
 q1, q2 = st.columns(2)
 
 with q1:
-
     grafico_quantitativo(
         df,
         "pessoas",
@@ -918,14 +1026,12 @@ with q1:
     )
 
 with q2:
-
     grafico_quantitativo(
         df,
         "mortos",
         "Vítimas fatais",
         limite=4
     )
-
 
 grafico_quantitativo(
     df,
@@ -938,7 +1044,163 @@ st.divider()
 
 
 # ============================================================
-# 14. DISTRIBUICOES QUALITATIVAS
+# 15. BOXPLOTS - ETAPA 13.1 DO COLAB
+# ============================================================
+
+st.subheader(
+    "Boxplots — dispersão e valores potencialmente atípicos"
+)
+
+st.markdown(
+    """
+    Os diagramas de caixa complementam os gráficos
+    de frequências, mostrando **Q1, mediana, Q3,
+    amplitude interquartil (AIQ) e valores extremos**.
+
+    O critério utilizado para identificar valores
+    potencialmente atípicos é **1,5 × AIQ**.
+
+    Todos os 383 registros originais permanecem
+    incluídos nos cálculos, mesmo quando um ponto
+    é classificado como potencialmente atípico.
+    """
+)
+
+mostrar_pontos_box = st.checkbox(
+    "Exibir individualmente os pontos potencialmente atípicos",
+    value=False,
+    key="amostra_boxplots_exibir_atipicos",
+    help=(
+        "Exibe os valores fora dos limites de 1,5 × AIQ. "
+        "A seleção dos registros não é alterada."
+    )
+)
+
+box_col1, box_col2 = st.columns(2)
+
+with box_col1:
+    grafico_boxplot(
+        df,
+        "pessoas",
+        "Pessoas envolvidas",
+        mostrar_pontos_box
+    )
+
+with box_col2:
+    grafico_boxplot(
+        df,
+        "feridos",
+        "Pessoas feridas",
+        mostrar_pontos_box
+    )
+
+resumos_box = [
+    resumo_boxplot(
+        df,
+        "pessoas",
+        "Pessoas envolvidas"
+    ),
+    resumo_boxplot(
+        df,
+        "feridos",
+        "Pessoas feridas"
+    )
+]
+
+resumos_box = [
+    item
+    for item in resumos_box
+    if item is not None
+]
+
+if resumos_box:
+    tabela_boxplot = pd.DataFrame(resumos_box)
+
+    st.markdown(
+        "**Medidas complementares dos boxplots**"
+    )
+
+    st.dataframe(
+        tabela_boxplot.style.format({
+            "Média": "{:.3f}",
+            "Q1": "{:.2f}",
+            "Mediana": "{:.2f}",
+            "Q3": "{:.2f}",
+            "AIQ": "{:.2f}",
+            "Limite inferior": "{:.2f}",
+            "Limite superior": "{:.2f}",
+            "Bigode inferior": "{:.0f}",
+            "Bigode superior": "{:.0f}",
+            "Mínimo": "{:.0f}",
+            "Máximo": "{:.0f}",
+            "Atípicos (%)": "{:.2f}%"
+        }),
+        width="stretch",
+        hide_index=True
+    )
+
+    st.caption(
+        "Os bigodes mostram os valores observados "
+        "dentro dos limites de 1,5 × AIQ. "
+        "Os valores potencialmente atípicos podem "
+        "ficar ocultos no gráfico, mas permanecem "
+        "incluídos nas estatísticas."
+    )
+
+    if any(
+        item["AIQ"] == 0
+        for item in resumos_box
+    ):
+        st.info(
+            "**Atenção ao AIQ igual a zero:** "
+            "a concentração de observações em poucos "
+            "valores pode resultar em Q1 = Q3, fazendo "
+            "o critério classificar vários registros "
+            "legítimos como potencialmente atípicos."
+        )
+
+    if not filtros_ativos:
+        pessoas_box = resumos_box[0]
+        feridos_box = resumos_box[1]
+
+        validacao_box = bool(
+            pessoas_box["Observações"] == 383
+            and feridos_box["Observações"] == 383
+            and pessoas_box["Atípicos"] == 33
+            and feridos_box["Atípicos"] == 12
+            and pessoas_box["Bigode superior"] == 4
+            and feridos_box["Bigode superior"] == 3
+            and pessoas_box["Máximo"] == 76
+            and feridos_box["Máximo"] == 38
+        )
+
+        if validacao_box:
+            st.caption(
+                "Resultados conferidos com a Etapa 13.1 "
+                "do Google Colab: 33 valores potencialmente "
+                "atípicos em pessoas envolvidas e 12 em "
+                "pessoas feridas; bigodes superiores "
+                "iguais a 4 e 3, respectivamente."
+            )
+        else:
+            st.warning(
+                "Os boxplots diferem dos resultados "
+                "de referência da Etapa 13.1. "
+                "Confira a integridade dos dados."
+            )
+
+st.caption(
+    "Com filtros ativos, os boxplots representam "
+    "exclusivamente os registros selecionados. "
+    "As estimativas inferenciais do estudo permanecem "
+    "baseadas na amostra original de 383 acidentes."
+)
+
+st.divider()
+
+
+# ============================================================
+# 16. DISTRIBUICOES QUALITATIVAS
 # ============================================================
 
 st.subheader("Distribuições qualitativas")
@@ -960,7 +1222,6 @@ st.markdown(
     de referência.
     """
 )
-
 
 grafico_qualitativo(
     df,
@@ -1005,7 +1266,7 @@ st.divider()
 
 
 # ============================================================
-# 15. EXPLORACAO DE FREQUENCIAS
+# 17. EXPLORACAO DE FREQUENCIAS
 # ============================================================
 
 st.subheader("Exploração das frequências")
@@ -1018,7 +1279,6 @@ colunas_categoricas = {
     "Unidade federativa": "uf",
     "Condição meteorológica": "condicao_metereologica"
 }
-
 
 selecionada = st.selectbox(
     "Selecione uma variável",
@@ -1034,25 +1294,24 @@ st.dataframe(
     tabela.style.format({
         "Percentual": "{:.2f}%"
     }),
-    use_container_width=True,
+    width="stretch",
     hide_index=True
 )
 
 st.caption(
-    "A tabela apresenta todas as categorias "
-    "observadas no conjunto amostral selecionado, "
-    "inclusive aquelas fora dos gráficos Top 10."
+    "A tabela apresenta todas as categorias observadas "
+    "no conjunto amostral selecionado, inclusive "
+    "aquelas fora dos gráficos Top 10."
 )
 
 st.divider()
 
 
 # ============================================================
-# 16. CONSULTA DOS REGISTROS
+# 18. CONSULTA DOS REGISTROS
 # ============================================================
 
 with st.expander("Consultar registros da amostra"):
-
     colunas_consulta = [
         "id",
         "data_inversa",
@@ -1066,7 +1325,7 @@ with st.expander("Consultar registros da amostra"):
 
     st.dataframe(
         df[colunas_consulta],
-        use_container_width=True,
+        width="stretch",
         hide_index=True
     )
 
@@ -1077,11 +1336,10 @@ with st.expander("Consultar registros da amostra"):
 
 
 # ============================================================
-# 17. METODOLOGIA E LIMITACOES
+# 19. METODOLOGIA E LIMITACOES
 # ============================================================
 
 with st.expander("Metodologia e limitações"):
-
     st.markdown(
         """
         **Fonte dos dados**
@@ -1105,7 +1363,7 @@ with st.expander("Metodologia e limitações"):
 
         383 ocorrências.
 
-        **Semente pseudoaleatória**
+        **Semente pseudoaleatória documentada**
 
         `random_state=42`
 
@@ -1118,9 +1376,10 @@ with st.expander("Metodologia e limitações"):
         **Reprodutibilidade**
 
         A amostra foi sorteada anteriormente
-        no Google Colab e exportada em arquivo CSV.
+        no Google Colab e exportada em CSV.
 
-        O Streamlit não realiza novos sorteios.
+        O Streamlit apenas lê o arquivo preservado
+        e não realiza novos sorteios.
 
         **Estatísticas amostrais**
 
@@ -1131,6 +1390,36 @@ with st.expander("Metodologia e limitações"):
 
         Foram preservados os agrupamentos
         utilizados na análise populacional.
+
+        **Boxplots — Etapa 13.1**
+
+        Os quartis foram calculados por
+        interpolação linear.
+
+        A amplitude interquartil foi definida por:
+
+        AIQ = Q3 − Q1.
+
+        Os limites para identificar observações
+        potencialmente atípicas foram:
+
+        - Limite inferior: Q1 − 1,5 × AIQ.
+        - Limite superior: Q3 + 1,5 × AIQ.
+
+        Os bigodes representam os valores observados
+        mais extremos dentro desses limites.
+
+        Os valores fora dos limites não foram
+        excluídos dos cálculos.
+
+        **Resultados da amostra completa**
+
+        - Pessoas envolvidas: 33 valores
+          potencialmente atípicos.
+        - Pessoas feridas: 12 valores
+          potencialmente atípicos.
+        - Valor máximo de pessoas envolvidas: 76.
+        - Valor máximo de pessoas feridas: 38.
 
         **Gráficos qualitativos**
 
@@ -1144,9 +1433,9 @@ with st.expander("Metodologia e limitações"):
         Os filtros permitem explorar subconjuntos
         dos 383 acidentes.
 
-        Os resultados filtrados não substituem
-        as estimativas originais utilizadas nos
-        intervalos de confiança e testes de hipóteses.
+        Resultados filtrados não substituem
+        as estimativas utilizadas nos intervalos
+        de confiança e testes de hipóteses.
 
         **Limitações**
 
@@ -1155,20 +1444,23 @@ with st.expander("Metodologia e limitações"):
         do processo de amostragem.
 
         A presença de valores extremos pode
-        influenciar as médias e os desvios-padrão.
+        influenciar médias e desvios-padrão.
 
-        As frequências não representam
+        Os boxplots são ferramentas descritivas.
+        Uma observação potencialmente atípica
+        não constitui, isoladamente, erro de registro.
+
+        Frequências de acidentes não representam
         automaticamente taxas de risco rodoviário.
         """
     )
 
 
 # ============================================================
-# 18. VALIDACAO METODOLOGICA
+# 20. VALIDACAO METODOLOGICA
 # ============================================================
 
 with st.expander("Validação da amostra original"):
-
     st.markdown(
         """
         Esta seção apresenta a validação estrutural
@@ -1176,57 +1468,75 @@ with st.expander("Validação da amostra original"):
         """
     )
 
+    # Texto evita mistura de inteiros e booleanos
+    # na mesma coluna do PyArrow/Streamlit.
     validacoes = pd.DataFrame([
         {
             "Verificação": "Tamanho da amostra",
-            "Resultado": len(amostra),
+            "Resultado": str(len(amostra)),
             "Situação": (
                 "Aprovado"
-                if len(amostra) == 383
+                if len(amostra) == N_AMOSTRA
                 else "Verificar"
             )
         },
         {
             "Verificação": "IDs únicos",
-            "Resultado": amostra["id"].is_unique,
+            "Resultado": (
+                "Sim" if ids_unicos else "Não"
+            ),
             "Situação": (
                 "Aprovado"
-                if amostra["id"].is_unique
+                if ids_unicos
                 else "Verificar"
             )
         },
         {
             "Verificação": "IDs na população",
-            "Resultado": ids_validos,
+            "Resultado": (
+                "Sim" if ids_presentes else "Não"
+            ),
             "Situação": (
                 "Aprovado"
-                if ids_validos
+                if ids_presentes
                 else "Verificar"
             )
         },
         {
             "Verificação": "Semente documentada",
-            "Resultado": SEMENTE_ORIGINAL,
+            "Resultado": str(SEMENTE_ORIGINAL),
             "Situação": "Documentada no Colab"
+        },
+        {
+            "Verificação": "Indicadores do Colab",
+            "Resultado": (
+                "Conferidos"
+                if indicadores_conferidos
+                else "Divergentes"
+            ),
+            "Situação": (
+                "Aprovado"
+                if indicadores_conferidos
+                else "Verificar"
+            )
         }
     ])
 
     st.dataframe(
         validacoes,
-        use_container_width=True,
+        width="stretch",
         hide_index=True
     )
 
     st.caption(
-        "A semente foi documentada no sorteio "
-        "original. A leitura do CSV não permite, "
-        "isoladamente, comprovar qual semente "
-        "foi utilizada."
+        "A semente foi documentada no sorteio original. "
+        "A leitura do CSV, isoladamente, não comprova "
+        "qual semente foi utilizada."
     )
 
 
 # ============================================================
-# 19. RODAPE
+# 21. RODAPE
 # ============================================================
 
 st.divider()
