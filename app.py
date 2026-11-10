@@ -395,6 +395,12 @@ def mostrar_inicio():
         "e à amostra preservada utilizadas no estudo."
     )
 
+        st.markdown(
+        f"**Variáveis disponíveis:** "
+        f"{len(populacao.columns)} "
+        "variáveis quantitativas e qualitativas."
+    )
+
     st.divider()
 
     # --------------------------------------------------------
