@@ -1,7 +1,7 @@
 
 # ============================================================
 # PRF ANALYTICS 2025
-# PAGINA INICIAL - VERSAO 2.1.1
+# PAGINA INICIAL - VERSAO 2.2
 # NAVEGACAO PERSONALIZADA E AUDITORIA DAS BASES
 #
 # Populacao: 72.529 acidentes
@@ -21,9 +21,10 @@
 # - Previa de dez registros
 # - Limitacoes metodologicas
 #
-# Ajuste 2.1.1:
-# - Exibe numero de variaveis na pagina inicial
-# - Corrige a estrutura de indentacao
+# Versao 2.2:
+# - Mantem todas as funcionalidades da pagina inicial
+# - Preserva os tres dashboards existentes
+# - Adiciona "4. Relatorio PDF" na navegacao
 #
 # Nenhum novo sorteio e realizado nesta aplicacao.
 # ============================================================
@@ -463,10 +464,6 @@ def mostrar_inicio():
         "Nível de confiança",
         "95%"
     )
-
-    # NOVO: NUMERO DE VARIAVEIS
-    # Mantido dentro da funcao mostrar_inicio(),
-    # com o mesmo nivel de indentacao dos indicadores.
 
     st.markdown(
         f"**Variáveis disponíveis:** "
@@ -966,6 +963,13 @@ pagina_inferencia = st.Page(
     url_path="Inferencia"
 )
 
+pagina_relatorio = st.Page(
+    "pages/4_Relatorio_PDF.py",
+    title="4. Relatório PDF",
+    icon="📄",
+    url_path="Relatorio_PDF"
+)
+
 
 # ============================================================
 # 7. NAVEGACAO PERSONALIZADA
@@ -976,7 +980,8 @@ pagina_selecionada = st.navigation(
         pagina_inicio,
         pagina_populacao,
         pagina_amostra,
-        pagina_inferencia
+        pagina_inferencia,
+        pagina_relatorio
     ],
     position="sidebar"
 )
