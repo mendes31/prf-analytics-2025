@@ -5,3 +5,7 @@ pandas
 numpy
 scipy
 statsmodels
+
+reportlab>=4.0
+matplotlib>=3.8
+pillow>=10.0
