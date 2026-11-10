@@ -1,14 +1,31 @@
 
 # ============================================================
 # PRF ANALYTICS 2025
-# PAGINA INICIAL - VERSAO 2.1
+# PAGINA INICIAL - VERSAO 2.1.1
 # NAVEGACAO PERSONALIZADA E AUDITORIA DAS BASES
 #
 # Populacao: 72.529 acidentes
 # Amostra: 383 acidentes
+# Variaveis: 30
 # Selecao original: AAS sem reposicao, semente 42
 #
-# Nenhum novo sorteio e realizado.
+# Preserva:
+# - Carregamento robusto dos CSVs
+# - Cache dos dados
+# - Indicadores gerais
+# - Auditoria de integridade
+# - Navegacao personalizada
+# - Links para os tres dashboards
+# - Metodologia
+# - Resultados inferenciais
+# - Previa de dez registros
+# - Limitacoes metodologicas
+#
+# Ajuste 2.1.1:
+# - Exibe numero de variaveis na pagina inicial
+# - Corrige a estrutura de indentacao
+#
+# Nenhum novo sorteio e realizado nesta aplicacao.
 # ============================================================
 
 from pathlib import Path
@@ -70,6 +87,7 @@ def numero_br(valor, casas=0):
 
 @st.cache_data(show_spinner="Carregando população...")
 def carregar_populacao():
+
     dados = pd.read_csv(
         ARQUIVO_POPULACAO,
         sep=";",
@@ -84,11 +102,15 @@ def carregar_populacao():
 
 @st.cache_data(show_spinner="Carregando amostra...")
 def carregar_amostra():
+
     erros = []
 
     for codificacao in ["utf-8-sig", "latin1"]:
+
         for separador in [",", ";", "\t"]:
+
             try:
+
                 dados = pd.read_csv(
                     ARQUIVO_AMOSTRA,
                     sep=separador,
@@ -114,6 +136,7 @@ def carregar_amostra():
                 UnicodeError,
                 pd.errors.ParserError
             ) as erro:
+
                 erros.append(str(erro))
 
     raise ValueError(
@@ -127,6 +150,7 @@ def carregar_amostra():
 # ============================================================
 
 def validar_bases(populacao, amostra):
+
     N = len(populacao)
     n = len(amostra)
 
@@ -154,6 +178,7 @@ def validar_bases(populacao, amostra):
     ]
 
     if possuem_id:
+
         ids_pop = pd.to_numeric(
             populacao["id"],
             errors="coerce"
@@ -169,8 +194,13 @@ def validar_bases(populacao, amostra):
             and ids_amo.notna().all()
         )
 
-        ids_unicos_pop = bool(ids_pop.is_unique)
-        ids_unicos_amo = bool(ids_amo.is_unique)
+        ids_unicos_pop = bool(
+            ids_pop.is_unique
+        )
+
+        ids_unicos_amo = bool(
+            ids_amo.is_unique
+        )
 
         ids_contidos = bool(
             ids_amo.isin(ids_pop).all()
@@ -187,6 +217,7 @@ def validar_bases(populacao, amostra):
                 for coluna in variaveis
             )
         ):
+
             pop = populacao[
                 ["id"] + variaveis
             ].copy()
@@ -203,6 +234,7 @@ def validar_bases(populacao, amostra):
                 "mortos",
                 "feridos"
             ]:
+
                 pop[coluna] = pd.to_numeric(
                     pop[coluna],
                     errors="coerce"
@@ -214,6 +246,7 @@ def validar_bases(populacao, amostra):
                 )
 
             for dados in [pop, amo]:
+
                 dados["fase_dia"] = (
                     dados["fase_dia"]
                     .astype("string")
@@ -231,6 +264,7 @@ def validar_bases(populacao, amostra):
             verificacoes_valores = []
 
             for coluna in variaveis:
+
                 iguais = (
                     conferencia[f"{coluna}_a"]
                     .eq(conferencia[f"{coluna}_p"])
@@ -247,8 +281,14 @@ def validar_bases(populacao, amostra):
             )
 
     verificacoes = [
-        ("Registros da população", N == N_ESPERADO),
-        ("Registros da amostra", n == AMOSTRA_ESPERADA),
+        (
+            "Registros da população",
+            N == N_ESPERADO
+        ),
+        (
+            "Registros da amostra",
+            n == AMOSTRA_ESPERADA
+        ),
         (
             "Variáveis da população",
             len(populacao.columns) == COLUNAS_ESPERADAS
@@ -257,12 +297,30 @@ def validar_bases(populacao, amostra):
             "Variáveis da amostra",
             len(amostra.columns) == COLUNAS_ESPERADAS
         ),
-        ("Mesmas colunas", colunas_iguais),
-        ("Coluna ID presente", possuem_id),
-        ("IDs válidos", ids_validos),
-        ("IDs únicos na população", ids_unicos_pop),
-        ("IDs únicos na amostra", ids_unicos_amo),
-        ("IDs da amostra na população", ids_contidos),
+        (
+            "Mesmas colunas",
+            colunas_iguais
+        ),
+        (
+            "Coluna ID presente",
+            possuem_id
+        ),
+        (
+            "IDs válidos",
+            ids_validos
+        ),
+        (
+            "IDs únicos na população",
+            ids_unicos_pop
+        ),
+        (
+            "IDs únicos na amostra",
+            ids_unicos_amo
+        ),
+        (
+            "IDs da amostra na população",
+            ids_contidos
+        ),
         (
             "Valores das variáveis principais",
             valores_iguais
@@ -281,9 +339,14 @@ def validar_bases(populacao, amostra):
         for nome, aprovado in verificacoes
     ])
 
-    return tabela, bool(
-        all(aprovado for _, aprovado in verificacoes)
+    situacao_geral = bool(
+        all(
+            aprovado
+            for _, aprovado in verificacoes
+        )
     )
+
+    return tabela, situacao_geral
 
 
 # ============================================================
@@ -297,6 +360,7 @@ def mostrar_inicio():
     # --------------------------------------------------------
 
     try:
+
         populacao = carregar_populacao()
         amostra = carregar_amostra()
 
@@ -306,19 +370,24 @@ def mostrar_inicio():
         )
 
     except Exception as erro:
+
         st.error(
             "Não foi possível carregar ou validar "
             "as bases de dados."
         )
+
         st.exception(erro)
         st.stop()
 
     N = len(populacao)
     n = len(amostra)
 
+    quantidade_variaveis = len(populacao.columns)
+
     fracao = n / N * 100
 
     if not aprovado:
+
         st.error(
             "Uma ou mais verificações de integridade "
             "não foram aprovadas. Revise a auditoria "
@@ -330,13 +399,16 @@ def mostrar_inicio():
             hide_index=True,
             width="stretch"
         )
+
         st.stop()
 
     # --------------------------------------------------------
     # 5.2 CABECALHO
     # --------------------------------------------------------
 
-    st.title("📊 PRF Analytics 2025")
+    st.title(
+        "📊 PRF Analytics 2025"
+    )
 
     st.subheader(
         "Probabilidade e Estatística para IA"
@@ -366,7 +438,9 @@ def mostrar_inicio():
     # 5.3 INDICADORES GERAIS
     # --------------------------------------------------------
 
-    st.header("Visão geral do estudo")
+    st.header(
+        "Visão geral do estudo"
+    )
 
     c1, c2, c3, c4 = st.columns(4)
 
@@ -390,15 +464,19 @@ def mostrar_inicio():
         "95%"
     )
 
+    # NOVO: NUMERO DE VARIAVEIS
+    # Mantido dentro da funcao mostrar_inicio(),
+    # com o mesmo nivel de indentacao dos indicadores.
+
+    st.markdown(
+        f"**Variáveis disponíveis:** "
+        f"{numero_br(quantidade_variaveis)} "
+        "variáveis quantitativas e qualitativas."
+    )
+
     st.caption(
         "Os valores correspondem à população operacional "
         "e à amostra preservada utilizadas no estudo."
-    )
-
-        st.markdown(
-        f"**Variáveis disponíveis:** "
-        f"{len(populacao.columns)} "
-        "variáveis quantitativas e qualitativas."
     )
 
     st.divider()
@@ -407,7 +485,9 @@ def mostrar_inicio():
     # 5.4 ACESSO AOS TRES DASHBOARDS
     # --------------------------------------------------------
 
-    st.header("Dashboards interativos")
+    st.header(
+        "Dashboards interativos"
+    )
 
     st.markdown(
         """
@@ -420,8 +500,12 @@ def mostrar_inicio():
     col1, col2, col3 = st.columns(3)
 
     with col1:
+
         with st.container(border=True):
-            st.subheader("📊 Dashboard 1")
+
+            st.subheader(
+                "📊 Dashboard 1"
+            )
 
             st.markdown(
                 "**Análise descritiva da população**"
@@ -429,7 +513,8 @@ def mostrar_inicio():
 
             st.write(
                 "Indicadores gerais, medidas estatísticas, "
-                "distribuições, boxplots e filtros interativos "
+                "distribuições quantitativas e qualitativas, "
+                "boxplots e filtros interativos "
                 "dos 72.529 acidentes."
             )
 
@@ -441,8 +526,12 @@ def mostrar_inicio():
             )
 
     with col2:
+
         with st.container(border=True):
-            st.subheader("📋 Dashboard 2")
+
+            st.subheader(
+                "📋 Dashboard 2"
+            )
 
             st.markdown(
                 "**Análise descritiva da amostra**"
@@ -450,8 +539,9 @@ def mostrar_inicio():
 
             st.write(
                 "Distribuições, frequências, medidas "
-                "descritivas, boxplots e filtros interativos "
-                "dos 383 acidentes selecionados."
+                "descritivas, boxplots e filtros "
+                "interativos dos 383 acidentes "
+                "selecionados."
             )
 
             st.page_link(
@@ -462,8 +552,12 @@ def mostrar_inicio():
             )
 
     with col3:
+
         with st.container(border=True):
-            st.subheader("📈 Dashboard 3")
+
+            st.subheader(
+                "📈 Dashboard 3"
+            )
 
             st.markdown(
                 "**Inferência estatística e comparação**"
@@ -471,8 +565,9 @@ def mostrar_inicio():
 
             st.write(
                 "Intervalos de confiança, testes Z e t, "
-                "curvas teóricas, comparação com a população, "
-                "sensibilidade e ajuste de Holm."
+                "curvas teóricas, comparação com a "
+                "população, sensibilidade e ajuste "
+                "de Holm."
             )
 
             st.page_link(
@@ -488,11 +583,14 @@ def mostrar_inicio():
     # 5.5 METODOLOGIA RESUMIDA
     # --------------------------------------------------------
 
-    st.header("Metodologia")
+    st.header(
+        "Metodologia"
+    )
 
     m1, m2 = st.columns(2)
 
     with m1:
+
         st.markdown(
             "#### População e amostragem"
         )
@@ -516,6 +614,7 @@ def mostrar_inicio():
         )
 
     with m2:
+
         st.markdown(
             "#### Inferência estatística"
         )
@@ -543,14 +642,31 @@ def mostrar_inicio():
     # 5.6 RESULTADOS CONSOLIDADOS
     # --------------------------------------------------------
 
-    st.header("Principais resultados")
+    st.header(
+        "Principais resultados"
+    )
 
     r1, r2, r3, r4 = st.columns(4)
 
-    r1.metric("Parâmetros analisados", "4")
-    r2.metric("ICs com cobertura", "4 de 4")
-    r3.metric("Rejeições individuais", "2")
-    r4.metric("Rejeições após Holm", "0")
+    r1.metric(
+        "Parâmetros analisados",
+        "4"
+    )
+
+    r2.metric(
+        "ICs com cobertura",
+        "4 de 4"
+    )
+
+    r3.metric(
+        "Rejeições individuais",
+        "2"
+    )
+
+    r4.metric(
+        "Rejeições após Holm",
+        "0"
+    )
 
     st.caption(
         "Síntese dos resultados previamente calculados "
@@ -580,7 +696,7 @@ def mostrar_inicio():
         **Visualizações complementares:** boxplots,
         curvas Z, curvas t de Student e comparações
         gráficas com intervalos de confiança
-        foram incorporados aos três dashboards.
+        foram incorporados aos dashboards.
         """
     )
 
@@ -597,7 +713,9 @@ def mostrar_inicio():
     # 5.7 FONTES E REPRODUTIBILIDADE
     # --------------------------------------------------------
 
-    st.header("Fontes e reprodutibilidade")
+    st.header(
+        "Fontes e reprodutibilidade"
+    )
 
     st.markdown(
         """
@@ -619,6 +737,7 @@ def mostrar_inicio():
     fonte, repositorio = st.columns(2)
 
     with fonte:
+
         st.link_button(
             "Consultar fonte oficial PRF",
             URL_PRF,
@@ -626,6 +745,7 @@ def mostrar_inicio():
         )
 
     with repositorio:
+
         st.link_button(
             "Consultar repositório GitHub",
             URL_GITHUB,
@@ -641,6 +761,7 @@ def mostrar_inicio():
     with st.expander(
         "🔎 Validação computacional das bases"
     ):
+
         st.write(
             "As verificações confirmam o tamanho "
             "dos conjuntos, as colunas, os IDs e "
@@ -673,11 +794,16 @@ def mostrar_inicio():
     with st.expander(
         "📋 Prévia dos registros utilizados"
     ):
+
         aba_populacao, aba_amostra = st.tabs(
-            ["População", "Amostra"]
+            [
+                "População",
+                "Amostra"
+            ]
         )
 
         with aba_populacao:
+
             st.markdown(
                 "**Primeiros dez registros da população**"
             )
@@ -689,6 +815,7 @@ def mostrar_inicio():
             )
 
         with aba_amostra:
+
             st.markdown(
                 "**Primeiros dez registros da amostra**"
             )
@@ -706,6 +833,7 @@ def mostrar_inicio():
     with st.expander(
         "📚 Informações metodológicas e limitações"
     ):
+
         st.markdown(
             """
             **Definição da população**
@@ -810,10 +938,6 @@ def mostrar_inicio():
 # 6. DEFINICAO DAS PAGINAS
 # ============================================================
 
-# A pagina inicial utiliza uma funcao.
-# Assim, o arquivo app.py permanece como ponto de entrada
-# da aplicacao e tambem como controlador da navegacao.
-
 pagina_inicio = st.Page(
     mostrar_inicio,
     title="Início",
@@ -856,8 +980,5 @@ pagina_selecionada = st.navigation(
     ],
     position="sidebar"
 )
-
-# Executa somente a pagina selecionada.
-# As demais paginas nao sao executadas.
 
 pagina_selecionada.run()
