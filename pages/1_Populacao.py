@@ -1,110 +1,192 @@
-    st.dataframe(
-        df[colunas_consulta].head(1000),
-        width="stretch",
-        hide_index=True
+if fases:
+    df = df[df["fase_dia"].isin(fases)]
+
+if classificacoes:
+    df = df[
+        df["classificacao_acidente"].isin(
+            classificacoes
+        )
+    ]
+
+if tipos:
+    df = df[df["tipo_acidente"].isin(tipos)]
+
+
+filtros_ativos = any([
+    bool(ufs),
+    bool(fases),
+    bool(classificacoes),
+    bool(tipos)
+])
+
+
+if df.empty:
+
+    st.warning(
+        "Nenhuma ocorrência corresponde "
+        "aos filtros selecionados."
     )
 
-    st.caption(
-        "Prévia dos primeiros 1.000 registros "
-        "do conjunto atualmente selecionado."
-    )
+    st.stop()
 
 
 # ============================================================
-# 18. METODOLOGIA
+# 11. CONTEXTO DOS FILTROS
 # ============================================================
 
-with st.expander("Metodologia e limitações"):
+if filtros_ativos:
 
-    st.markdown(
-        """
-        **Fonte dos dados**
+    st.warning(
+        "Visualização filtrada: os resultados abaixo "
+        "descrevem apenas as ocorrências selecionadas. "
+        "Não representam os parâmetros da população "
+        "completa utilizados nos testes estatísticos."
+    )
 
-        Polícia Rodoviária Federal (PRF) —
-        acidentes de trânsito de 2025.
+else:
 
-        **População operacional**
-
-        72.529 ocorrências registradas na base
-        utilizada no estudo acadêmico.
-
-        **Unidade de análise**
-
-        Uma ocorrência de acidente.
-
-        **Variáveis quantitativas**
-
-        Pessoas envolvidas, mortes, feridos,
-        feridos leves, feridos graves e veículos.
-
-        **Estatísticas descritivas**
-
-        Média, mediana, quartis, valores extremos
-        e desvio-padrão populacional.
-
-        **Distribuições quantitativas**
-
-        Foram utilizados gráficos de barras,
-        respeitando a natureza discreta das
-        variáveis de contagem.
-
-        Os agrupamentos finais foram mantidos
-        conforme o estudo no Google Colab:
-
-        - Pessoas: 10 ou mais;
-        - Mortos: 4 ou mais;
-        - Feridos: 6 ou mais.
-
-        **Boxplots complementares — Etapa 13.1**
-
-        Diagramas de caixa das variáveis `pessoas` e `feridos`,
-        com quartis calculados por interpolação linear e identificação
-        de valores potencialmente atípicos pelo critério 1,5 × AIQ.
-        Os dados não foram removidos; a exibição individual dos
-        pontos pode ser ativada sob demanda.
-
-        Para `feridos`, a população completa apresenta AIQ igual
-        a zero; por isso o percentual de registros classificados
-        como potencialmente atípicos exige interpretação cuidadosa.
-
-        **Distribuições qualitativas**
-
-        Frequências absolutas e relativas,
-        utilizando gráficos de barras horizontais.
-
-        **Interatividade**
-
-        Os filtros possibilitam explorar
-        subconjuntos da população.
-
-        Resultados filtrados não substituem
-        os parâmetros populacionais utilizados
-        nos procedimentos inferenciais.
-
-        **Limitações**
-
-        As frequências dos registros não
-        representam automaticamente taxas de
-        risco rodoviário.
-
-        Comparações entre estados e períodos
-        não consideram necessariamente
-        diferenças de exposição ao tráfego.
-
-        As causas apresentadas correspondem
-        às classificações registradas pela PRF.
-        """
+    st.success(
+        "Visualização da população completa: "
+        "72.529 ocorrências."
     )
 
 
+st.caption(
+    f"Registros selecionados: "
+    f"{numero_br(len(df))} de "
+    f"{numero_br(len(populacao))} "
+    f"({numero_br(percentual(len(df), len(populacao)), 2)}%)."
+)
+
+
 # ============================================================
-# 19. RODAPÉ
+# 12. INDICADORES GERAIS
 # ============================================================
+
+st.subheader("Indicadores gerais")
+
+total_acidentes = len(df)
+total_pessoas = int(df["pessoas"].sum())
+total_mortos = int(df["mortos"].sum())
+total_feridos = int(df["feridos"].sum())
+total_veiculos = int(df["veiculos"].sum())
+
+acidentes_fatais = int(
+    (df["mortos"] > 0).sum()
+)
+
+acidentes_feridos = int(
+    (df["feridos"] > 0).sum()
+)
+
+
+c1, c2, c3, c4 = st.columns(4)
+
+with c1:
+    st.metric(
+        "Acidentes",
+        numero_br(total_acidentes)
+    )
+
+with c2:
+    st.metric(
+        "Pessoas envolvidas",
+        numero_br(total_pessoas)
+    )
+
+with c3:
+    st.metric(
+        "Vítimas fatais",
+        numero_br(total_mortos)
+    )
+
+with c4:
+    st.metric(
+        "Pessoas feridas",
+        numero_br(total_feridos)
+    )
+
+
+c5, c6, c7, c8 = st.columns(4)
+
+with c5:
+    st.metric(
+        "Veículos envolvidos",
+        numero_br(total_veiculos)
+    )
+
+with c6:
+    st.metric(
+        "Acidentes com mortes",
+        numero_br(acidentes_fatais)
+    )
+
+with c7:
+    st.metric(
+        "Proporção com mortes",
+        numero_br(
+            percentual(
+                acidentes_fatais,
+                total_acidentes
+            ),
+            2
+        ) + "%"
+    )
+
+with c8:
+    st.metric(
+        "Acidentes com feridos",
+        numero_br(acidentes_feridos)
+    )
+
 
 st.divider()
 
-st.caption(
-    "PRF Analytics 2025 | "
-    "Dashboard 1 — Análise descritiva da população | "
-    "Probabilidade e Estatística para IA"
-)
+
+# ============================================================
+# 13. MEDIDAS ESTATÍSTICAS
+# ============================================================
+
+st.subheader("Medidas estatísticas")
+
+variaveis = [
+    "pessoas",
+    "mortos",
+    "feridos",
+    "feridos_leves",
+    "feridos_graves",
+    "veiculos"
+]
+
+linhas = []
+
+for coluna in variaveis:
+
+    serie = df[coluna].dropna()
+
+    linhas.append({
+        "Variável": coluna,
+        "Observações válidas": len(serie),
+        "Média": serie.mean(),
+        "Mediana": serie.median(),
+        "Desvio-padrão populacional": (
+            serie.std(ddof=0)
+        ),
+        "Mínimo": serie.min(),
+        "1º quartil": serie.quantile(0.25),
+        "3º quartil": serie.quantile(0.75),
+        "Máximo": serie.max()
+    })
+
+
+estatisticas = pd.DataFrame(linhas)
+
+st.dataframe(
+    estatisticas.style.format({
+        "Média": "{:.3f}",
+        "Mediana": "{:.2f}",
+        "Desvio-padrão populacional": "{:.3f}",
+        "Mínimo": "{:.0f}",
+        "1º quartil": "{:.2f}",
+        "3º quartil": "{:.2f}",
+        "Máximo": "{:.0f}"
