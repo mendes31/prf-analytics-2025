@@ -1,4 +1,3 @@
-
 # ============================================================
 # PRF ANALYTICS 2025
 # DASHBOARD 1 - ANÁLISE DESCRITIVA DA POPULAÇÃO
