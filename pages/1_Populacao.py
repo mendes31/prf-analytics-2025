@@ -1,192 +1,96 @@
-    )
 
-    fig.update_yaxes(
-        gridcolor=COR_GRADE,
-        zeroline=False,
-        tickfont=dict(size=12)
-    )
+# ============================================================
+# PRF ANALYTICS 2025
+# DASHBOARD 1 - ANÁLISE DESCRITIVA DA POPULAÇÃO
+#
+# Versão 1.2 - Boxplots e análise de valores potencialmente atípicos
+#
+# Ajustes:
+# - Eixos quantitativos com categorias discretas
+# - Fontes e percentuais mais legíveis
+# - Filtros e orientações em português
+# - Informações interativas aprimoradas
+# - Preservação dos cálculos estatísticos
+# - Boxplots interativos de pessoas e feridos (Etapa 13.1)
+# - Quartis, AIQ e identificação de valores potencialmente atípicos
+# ============================================================
 
-    return fig
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+
+from pathlib import Path
+from textwrap import wrap
 
 
 # ============================================================
-# 5. TABELA DE FREQUÊNCIAS QUALITATIVAS
+# 1. CONFIGURAÇÃO
 # ============================================================
 
-def tabela_frequencia(df, coluna):
+st.set_page_config(
+    page_title="População | PRF Analytics 2025",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-    serie = (
-        df[coluna]
-        .fillna("Não informado")
-        .astype(str)
-        .str.strip()
-        .replace("", "Não informado")
-    )
+COR_PRINCIPAL = "#1677C8"
+COR_DESTAQUE = "#E58A2B"
+COR_TEXTO = "#253247"
+COR_GRADE = "#E9EDF2"
 
-    resultado = (
-        serie.value_counts(dropna=False)
-        .rename_axis("Categoria")
-        .reset_index(name="Frequência")
-    )
+TOTAL_ESPERADO = 72529
 
-    resultado["Percentual"] = (
-        resultado["Frequência"]
-        / len(df) * 100
-        if len(df) > 0
-        else 0.0
-    )
-
-    return resultado
+ARQUIVO = (
+    Path(__file__).resolve().parents[1]
+    / "datatran2025.csv"
+)
 
 
 # ============================================================
-# 6. GRÁFICOS QUALITATIVOS
+# 2. FUNÇÕES DE FORMATAÇÃO
 # ============================================================
 
-def grafico_qualitativo(
-    df,
-    coluna,
-    titulo,
-    top_n=None
-):
-
-    tabela = tabela_frequencia(
-        df,
-        coluna
+def numero_br(valor, casas=0):
+    texto = f"{valor:,.{casas}f}"
+    return (
+        texto.replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
     )
 
-    if top_n is not None:
-        tabela = tabela.head(top_n).copy()
 
-    tabela = tabela.sort_values(
-        ["Percentual", "Categoria"],
-        ascending=[True, True]
-    ).copy()
+def percentual(parte, total):
+    if total == 0:
+        return 0.0
 
-    tabela["Rotulo"] = tabela["Categoria"].apply(
-        lambda x: quebrar_rotulo(x, 44)
+    return parte / total * 100
+
+
+def quebrar_rotulo(texto, largura=42):
+    partes = wrap(
+        str(texto),
+        width=largura,
+        break_long_words=False,
+        break_on_hyphens=False
     )
 
-    percentuais = tabela["Percentual"].tolist()
-    frequencias = tabela["Frequência"].tolist()
-    categorias = tabela["Categoria"].tolist()
-
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Bar(
-            x=percentuais,
-            y=tabela["Rotulo"],
-            orientation="h",
-            marker=dict(
-                color=COR_PRINCIPAL
-            ),
-            text=[
-                numero_br(v, 2) + "%"
-                for v in percentuais
-            ],
-            textposition="outside",
-            textfont=dict(
-                size=13,
-                color=COR_TEXTO
-            ),
-            customdata=[
-                [categoria, int(freq)]
-                for categoria, freq
-                in zip(categorias, frequencias)
-            ],
-            hovertemplate=(
-                "<b>%{customdata[0]}</b>"
-                "<br>Participação: %{x:.2f}%"
-                "<br>Ocorrências: %{customdata[1]:,}"
-                "<extra></extra>"
-            ),
-            cliponaxis=False
-        )
-    )
-
-    maximo = max(percentuais) if percentuais else 0
-
-    fig = aplicar_estilo(
-        fig,
-        altura=max(340, len(tabela) * 47 + 115)
-    )
-
-    fig.update_layout(
-        title=dict(
-            text=titulo,
-            x=0,
-            xanchor="left"
-        ),
-        xaxis=dict(
-            title="% dos acidentes selecionados",
-            range=[0, max(1, maximo * 1.16)],
-            ticksuffix="%",
-            gridcolor=COR_GRADE,
-            showgrid=True,
-            rangemode="tozero"
-        ),
-        yaxis=dict(
-            title=None,
-            showgrid=False,
-            type="category"
-        ),
-        margin=dict(
-            l=20,
-            r=90,
-            t=65,
-            b=60
-        )
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True,
-        config={"displaylogo": False}
-    )
+    return "<br>".join(partes) if partes else str(texto)
 
 
 # ============================================================
-# 7. GRÁFICOS QUANTITATIVOS DISCRETOS
+# 3. CARREGAMENTO DA POPULAÇÃO
 # ============================================================
 
-def grafico_quantitativo(
-    df,
-    coluna,
-    titulo,
-    limite
-):
+@st.cache_data(show_spinner="Carregando dados da PRF...")
+def carregar_dados():
 
-    serie = pd.to_numeric(
-        df[coluna],
-        errors="coerce"
-    ).dropna()
-
-    categorias = [
-        str(i)
-        for i in range(limite)
-    ] + [f"{limite} ou mais"]
-
-    grupos = serie.apply(
-        lambda x: (
-            str(int(x))
-            if x < limite
-            else f"{limite} ou mais"
-        )
+    df = pd.read_csv(
+        ARQUIVO,
+        sep=";",
+        encoding="latin1",
+        low_memory=False
     )
 
-    frequencias = (
-        grupos.value_counts()
-        .reindex(categorias, fill_value=0)
-    )
-
-    tabela = pd.DataFrame({
-        "Categoria": categorias,
-        "Frequência": frequencias.values
-    })
-
-    tabela["Percentual"] = (
-        tabela["Frequência"] / len(df) * 100
-        if len(df) > 0
-        else 0.0
-    )
+    df.columns = df.columns.str.strip()
