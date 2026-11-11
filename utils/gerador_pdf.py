@@ -424,49 +424,27 @@ def gerar_pdf(raiz: str|Path,incluir_graficos:bool=True,incluir_metodologia:bool
             p('Na amostra, a média de pessoas foi 2,744, contra 2,597 na população; 43,6% das ocorrências envolveram duas pessoas, contra 40,4% na população. As diferenças ilustram variabilidade amostral.')
         h2('Distribuições qualitativas — frequências e proporções')
         for c in QUALITATIVAS:
-            # Somente para a classificacao exibida no relatorio: o registro
-            # ID 652519 tem mortos=1, mas classificacao original ausente.
-            # Harmonizacao derivada e documentada, sem mudar os CSVs.
-            if c == 'classificacao_acidente':
-                serie_pop = pop[c].copy()
-                serie_amo = d[c].copy()
-                sem_pop = (serie_pop.isna() | serie_pop.astype('string').str.strip().eq('').fillna(False))
-                sem_amo = (serie_amo.isna() | serie_amo.astype('string').str.strip().eq('').fillna(False))
-                ajust_pop = sem_pop & pop['mortos'].gt(0)
-                ajust_amo = sem_amo & d['mortos'].gt(0)
-                if int(ajust_pop.sum()) != 1 or int(pop.loc[ajust_pop, 'id'].iloc[0]) != 652519:
-                    raise ValueError('Registro de classificacao ausente nao corresponde a auditoria de 2025.')
-                serie_pop.loc[ajust_pop] = 'Com Vítimas Fatais'
-                serie_amo.loc[ajust_amo] = 'Com Vítimas Fatais'
-                h2('Classificação do acidente — harmonizada para mortalidade')
-                ordem = (serie_pop.fillna('Não informado').astype(str).str.strip()
-                    .replace('', 'Não informado').value_counts().index.tolist())
-                freq = serie_amo.fillna('Não informado').astype(str).str.strip().replace('', 'Não informado').value_counts()
-                linhas = [(str(nome), int(freq.get(nome, 0)), 100*int(freq.get(nome, 0))/len(d)) for nome in ordem]
-            else:
-                h2(NOME[c])
-                base=pop[c].fillna('Não informado').astype(str).str.strip().replace('','Não informado')
-                ordem=base.value_counts().index.tolist()
-                if c in TOP10:ordem=ordem[:10]
-                linhas=freq_categorica(d,c,ordem)
-
-            tabela(['Categoria','Frequência','Proporção'],[
-                [nome,br(qtd,0),br(proporcao,2)+'%'] for nome,qtd,proporcao in linhas],
-                [11.2*cm,3.1*cm,3.5*cm])
-            if c == 'classificacao_acidente':
-                if tipo == 'população':
-                    p('<b>Nota de consistência (classificação harmonizada):</b> a base original contém '
-                      '<b>5.209</b> registros com a categoria “Com Vítimas Fatais” e '
-                      '<b>1 registro sem classificação</b> (ID 652519, com 1 morte). '
-                      'Para esta tabela e seu gráfico, essa única ocorrência foi atribuída '
-                      'à categoria fatal, totalizando <b>5.210 acidentes (7,18%)</b>, '
-                      'de acordo com o indicador oficial de análise <b>mortos &gt; 0</b> '
-                      'utilizado em P1. O CSV original e a amostra permanecem inalterados.', 'Pequeno')
-                else:
-                    p('Classificação harmonizada pelo mesmo critério da população: '
-                      'registros com mortes e classificação ausente são contabilizados '
-                      'como fatais apenas na apresentação descritiva.', 'Pequeno')
-            imagem(plot_categorica(linhas,c))
+            # Descritivo qualitativo: preservar rigorosamente as categorias
+            # existentes no CSV, sem imputacao ou harmonizacao.
+            h2(NOME[c])
+            base = (pop[c].fillna('Não informado').astype(str).str.strip()
+                    .replace('', 'Não informado'))
+            ordem = base.value_counts().index.tolist()
+            if c in TOP10:
+                ordem = ordem[:10]
+            linhas = freq_categorica(d, c, ordem)
+            tabela(['Categoria', 'Frequência', 'Proporção'], [
+                [nome, br(qtd, 0), br(proporcao, 2) + '%']
+                for nome, qtd, proporcao in linhas
+            ], [11.2*cm, 3.1*cm, 3.5*cm])
+            if c == 'classificacao_acidente' and tipo == 'população':
+                p('<b>Nota metodológica — duas variáveis distintas:</b> a categoria '
+                  'original <b>“Com Vítimas Fatais” tem 5.209 registros</b>, '
+                  'e há <b>1 registro “Não informado”</b> (ID 652519, com 1 morte). '
+                  'O indicador P1 contabiliza <b>todos os acidentes com mortos &gt; 0</b>: '
+                  '<b>5.210 acidentes (7,18%)</b>, independentemente da classificação. '
+                  'Nenhum registro foi reclassificado ou excluído.', 'Pequeno')
+            imagem(plot_categorica(linhas, c))
             if c in TOP10:p('Dez categorias definidas pela frequência na população; percentuais calculados sobre todos os registros.','Pequeno')
         h2('Consulta dos registros e escopo')
         p('O PDF utiliza o conjunto completo sem filtros. Prévia de dez registros; consulta interativa disponível no Streamlit.','Pequeno')
