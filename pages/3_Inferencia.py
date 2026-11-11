@@ -1,22 +1,23 @@
 
 # ============================================================
 # PRF ANALYTICS 2025
-# DASHBOARD 3 — INFERENCIA ESTATISTICA
-# VERSAO 1.3 — GRAFICOS EXPLICATIVOS
+# DASHBOARD 3 - INFERENCIA ESTATISTICA E COMPARACAO
+# VERSAO 1.3 - INTERVALOS EXPLICATIVOS E MEMORIA DE CALCULO
 #
-# Populacao: 72.529 acidentes
-# Amostra original: 383 acidentes
-# AAS sem reposicao — semente 42
+# Populacao operacional: 72.529 acidentes
+# Amostra AAS sem reposicao: 383 acidentes
+# Semente original documentada: 42
+# Confianca: 95% | Significancia: 5%
 #
-# Preserva:
-# - Visao geral
+# Inclui:
 # - Intervalos de confianca
-# - Testes Z e t
-# - Curvas teoricas
-# - Comparacao populacao x amostra
-# - Sensibilidade
+# - Testes Z para proporcoes
+# - Testes t para medias
+# - Curvas teoricas com regioes criticas e valores-p
+# - Graficos comparativos populacao x amostra
+# - Analise de sensibilidade
 # - Ajuste de Holm
-# - Metodologia e auditoria
+# - Auditoria metodologica
 #
 # Nenhum novo sorteio e realizado.
 # ============================================================
@@ -27,24 +28,22 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-
 from scipy import stats
 
 
 # ============================================================
-# 1. CONFIGURACAO
+# 1. CONFIGURACOES
 # ============================================================
 
 st.set_page_config(
     page_title="Inferência | PRF Analytics 2025",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
 N_ESPERADO = 72529
 n_ESPERADO = 383
-
 ALFA = 0.05
 
 AZUL = "#1677C8"
@@ -66,90 +65,99 @@ HIPOTESES = {
         "tipo": "Proporção",
         "referencia": 0.10,
         "evento": "mortos > 0",
-        "pergunta": "A proporção difere de 10%?",
+        "pergunta": (
+            "A proporção de acidentes com pelo menos "
+            "uma morte difere de 10%?"
+        )
     },
     "P2": {
         "nome": "Acidentes em plena noite",
         "tipo": "Proporção",
         "referencia": 0.30,
         "evento": 'fase_dia == "Plena Noite"',
-        "pergunta": "A proporção difere de 30%?",
+        "pergunta": (
+            "A proporção de acidentes registrados "
+            "em plena noite difere de 30%?"
+        )
     },
     "M1": {
         "nome": "Pessoas envolvidas",
         "tipo": "Média",
         "referencia": 3.0,
         "evento": "pessoas",
-        "pergunta": "A média difere de 3 pessoas?",
+        "pergunta": (
+            "O número médio de pessoas envolvidas "
+            "por acidente difere de três?"
+        )
     },
     "M2": {
         "nome": "Pessoas feridas",
         "tipo": "Média",
         "referencia": 1.0,
         "evento": "feridos",
-        "pergunta": "A média difere de 1 pessoa?",
-    },
+        "pergunta": (
+            "O número médio de pessoas feridas "
+            "por acidente difere de uma?"
+        )
+    }
 }
 
 
 # ============================================================
-# 2. FORMATACAO
+# 2. FUNCOES DE FORMATACAO
 # ============================================================
 
 def br(valor, casas=2):
     try:
         numero = float(valor)
-
         if not np.isfinite(numero):
             return "N/D"
-
-        texto = f"{numero:,.{casas}f}"
-
-        return (
-            texto.replace(",", "X")
-            .replace(".", ",")
-            .replace("X", ".")
-        )
-
     except (TypeError, ValueError):
         return "N/D"
 
+    texto = f"{numero:,.{casas}f}"
+
+    return (
+        texto.replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
+
 
 def pct(valor, casas=2):
-    return br(valor * 100, casas) + "%"
+    return br(float(valor) * 100, casas) + "%"
 
 
 def formato_p(valor):
     if valor < 0.000001:
         return "< 0,000001"
-
     return br(valor, 6)
 
 
-def decisao(p):
-    if p < ALFA:
-        return "Rejeitar H0"
-
-    return "Não rejeitar H0"
+def decisao(valor):
+    return (
+        "Rejeitar H0"
+        if valor < ALFA
+        else "Não rejeitar H0"
+    )
 
 
 def formatar_valor(valor, tipo, casas=3):
     if tipo == "Proporção":
         return pct(valor, 2)
-
     return br(valor, casas)
 
 
-def plotar(fig):
+def exibir_plotly(fig):
     st.plotly_chart(
         fig,
         width="stretch",
-        config={"displaylogo": False},
+        config={"displaylogo": False}
     )
 
 
 # ============================================================
-# 3. CARREGAMENTO DAS BASES
+# 3. LEITURA DAS BASES
 # ============================================================
 
 @st.cache_data(show_spinner="Carregando população...")
@@ -158,7 +166,7 @@ def carregar_populacao():
         CSV_POPULACAO,
         sep=";",
         encoding="latin1",
-        low_memory=False,
+        low_memory=False
     )
 
     dados.columns = dados.columns.str.strip()
@@ -175,25 +183,27 @@ def carregar_amostra():
                     CSV_AMOSTRA,
                     sep=separador,
                     encoding=encoding,
-                    low_memory=False,
+                    low_memory=False
                 )
 
                 dados.columns = dados.columns.str.strip()
 
                 if (
-                    dados.shape == (383, 30)
+                    len(dados) == n_ESPERADO
+                    and len(dados.columns) == 30
                     and "id" in dados.columns
                 ):
                     return dados
 
             except (
                 UnicodeError,
-                pd.errors.ParserError,
+                pd.errors.ParserError
             ):
                 continue
 
     raise ValueError(
-        "Não foi possível reconhecer o CSV da amostra."
+        "Não foi possível reconhecer o formato "
+        "do arquivo amostra_PRF_2025.csv."
     )
 
 
@@ -202,7 +212,7 @@ try:
     amostra = carregar_amostra()
 
 except Exception as erro:
-    st.error("Falha no carregamento das bases.")
+    st.error("Falha no carregamento dos dados.")
     st.exception(erro)
     st.stop()
 
@@ -218,19 +228,15 @@ if N != N_ESPERADO or n != n_ESPERADO:
     st.stop()
 
 
-# ============================================================
-# 4. VALIDACAO DA AMOSTRA
-# ============================================================
-
-COLUNAS = [
+obrigatorias = [
     "id",
     "mortos",
     "fase_dia",
     "pessoas",
-    "feridos",
+    "feridos"
 ]
 
-for coluna in COLUNAS:
+for coluna in obrigatorias:
     if (
         coluna not in populacao.columns
         or coluna not in amostra.columns
@@ -239,16 +245,20 @@ for coluna in COLUNAS:
         st.stop()
 
 
+# ============================================================
+# 4. VALIDACAO DA AMOSTRA
+# ============================================================
+
 for dados in [populacao, amostra]:
     dados["id"] = pd.to_numeric(
         dados["id"],
-        errors="coerce",
+        errors="coerce"
     )
 
     for coluna in ["mortos", "pessoas", "feridos"]:
         dados[coluna] = pd.to_numeric(
             dados[coluna],
-            errors="coerce",
+            errors="coerce"
         )
 
     dados["fase_dia"] = (
@@ -259,10 +269,10 @@ for dados in [populacao, amostra]:
 
 
 ids_validos = bool(
-    populacao["id"].notna().all()
-    and amostra["id"].notna().all()
-    and populacao["id"].is_unique
+    amostra["id"].notna().all()
+    and populacao["id"].notna().all()
     and amostra["id"].is_unique
+    and populacao["id"].is_unique
     and amostra["id"].isin(populacao["id"]).all()
 )
 
@@ -271,32 +281,37 @@ if not ids_validos:
     st.stop()
 
 
+variaveis_conferencia = [
+    "mortos",
+    "fase_dia",
+    "pessoas",
+    "feridos"
+]
+
 if (
     amostra[["mortos", "pessoas", "feridos"]]
     .isna()
     .any()
     .any()
 ):
-    st.error("Existem valores quantitativos ausentes.")
+    st.error(
+        "Existem valores ausentes nas variáveis "
+        "quantitativas da amostra."
+    )
     st.stop()
 
 
-conferencia = amostra[COLUNAS].merge(
-    populacao[COLUNAS],
+conferencia = amostra[
+    ["id"] + variaveis_conferencia
+].merge(
+    populacao[["id"] + variaveis_conferencia],
     on="id",
     how="left",
     suffixes=("_a", "_p"),
-    validate="one_to_one",
+    validate="one_to_one"
 )
 
-valores_conferidos = True
-
-for coluna in [
-    "mortos",
-    "fase_dia",
-    "pessoas",
-    "feridos",
-]:
+for coluna in variaveis_conferencia:
     iguais = bool(
         conferencia[f"{coluna}_a"]
         .eq(conferencia[f"{coluna}_p"])
@@ -305,7 +320,6 @@ for coluna in [
     )
 
     if not iguais:
-        valores_conferidos = False
         st.error(
             "Divergência entre população e amostra: "
             + coluna
@@ -313,6 +327,7 @@ for coluna in [
         st.stop()
 
 
+# Conferencias dos indicadores originais do Colab.
 contagens_validas = bool(
     int(amostra["pessoas"].sum()) == 1051
     and int(amostra["feridos"].sum()) == 486
@@ -327,8 +342,8 @@ contagens_validas = bool(
 
 if not contagens_validas:
     st.error(
-        "Os indicadores da amostra divergem "
-        "do Google Colab."
+        "As contagens da amostra divergem dos "
+        "resultados validados no Google Colab."
     )
     st.stop()
 
@@ -352,11 +367,10 @@ T_CRITICO = float(
 GL = n - 1
 
 
-def vetor(dados, codigo):
+def valores_variavel(dados, codigo):
     if codigo == "P1":
         return (
-            dados["mortos"]
-            .gt(0)
+            (dados["mortos"] > 0)
             .astype(float)
             .to_numpy()
         )
@@ -370,66 +384,50 @@ def vetor(dados, codigo):
             .to_numpy()
         )
 
-    coluna = (
-        "pessoas"
-        if codigo == "M1"
-        else "feridos"
-    )
+    if codigo == "M1":
+        return dados["pessoas"].to_numpy(dtype=float)
 
-    return dados[coluna].to_numpy(dtype=float)
+    return dados["feridos"].to_numpy(dtype=float)
 
 
 # ============================================================
-# 6. INFERENCIA ESTATISTICA
+# 6. ESTIMACAO E TESTES DE HIPOTESES
 # ============================================================
 
-def calcular_inferencia(codigo):
-    hipotese = HIPOTESES[codigo]
+def inferencia(codigo):
+    h = HIPOTESES[codigo]
 
-    dados_amostrais = vetor(amostra, codigo)
-    dados_populacionais = vetor(populacao, codigo)
+    valores = valores_variavel(amostra, codigo)
+    valores_pop = valores_variavel(populacao, codigo)
 
-    estimativa = float(
-        np.mean(dados_amostrais)
-    )
+    estimativa = float(np.mean(valores))
+    parametro = float(np.mean(valores_pop))
 
-    parametro = float(
-        np.mean(dados_populacionais)
-    )
-
-    h0 = float(hipotese["referencia"])
+    h0 = float(h["referencia"])
 
     desvio = None
-
-    if hipotese["tipo"] == "Proporção":
-        sucessos = int(
-            np.sum(dados_amostrais)
-        )
-
+    if h["tipo"] == "Proporção":
         erro_ic = (
             np.sqrt(
                 estimativa * (1 - estimativa) / n
-            )
-            * FPC
+            ) * FPC
         )
 
-        critico = Z_CRITICO
-
-        margem = critico * erro_ic
+        margem = Z_CRITICO * erro_ic
 
         inferior = max(
             0.0,
-            estimativa - margem,
+            estimativa - margem
         )
-
         superior = min(
             1.0,
-            estimativa + margem,
+            estimativa + margem
         )
 
         erro_h0 = (
-            np.sqrt(h0 * (1 - h0) / n)
-            * FPC
+            np.sqrt(
+                h0 * (1 - h0) / n
+            ) * FPC
         )
 
         estatistica = (
@@ -443,62 +441,56 @@ def calcular_inferencia(codigo):
         )
 
     else:
-        sucessos = None
-
         desvio = float(
-            np.std(
-                dados_amostrais,
-                ddof=1,
-            )
+            np.std(valores, ddof=1)
         )
 
-        erro_ic = (
+        erro = (
             desvio / np.sqrt(n)
         ) * FPC
 
-        critico = T_CRITICO
-
-        margem = critico * erro_ic
+        erro_ic = erro
+        margem = T_CRITICO * erro
 
         inferior = estimativa - margem
         superior = estimativa + margem
 
         estatistica = (
             estimativa - h0
-        ) / erro_ic
+        ) / erro
 
         valor_p = float(
             2 * stats.t.sf(
                 abs(estatistica),
-                df=GL,
+                df=GL
             )
         )
 
     return {
         "codigo": codigo,
-        "nome": hipotese["nome"],
-        "tipo": hipotese["tipo"],
+        "nome": h["nome"],
+        "tipo": h["tipo"],
         "estimativa": estimativa,
         "parametro": parametro,
         "h0": h0,
+        "erro_padrao_ic": float(erro_ic),
+        "margem_ic": float(margem),
+        "desvio_amostral": desvio,
+        "critico_ic": Z_CRITICO if h["tipo"] == "Proporção" else T_CRITICO,
+        "sucessos_amostrais": int(np.sum(valores)) if h["tipo"] == "Proporção" else None,
         "inferior": float(inferior),
         "superior": float(superior),
-        "margem": float(margem),
-        "erro_ic": float(erro_ic),
-        "critico": float(critico),
-        "desvio": desvio,
-        "sucessos": sucessos,
         "estatistica": float(estatistica),
         "p": valor_p,
         "decisao": decisao(valor_p),
         "contem": bool(
             inferior <= parametro <= superior
-        ),
+        )
     }
 
 
 resultados = {
-    codigo: calcular_inferencia(codigo)
+    codigo: inferencia(codigo)
     for codigo in CODIGOS
 }
 
@@ -510,11 +502,10 @@ resultados = {
 def ajuste_holm(valores):
     p = np.asarray(
         valores,
-        dtype=float,
+        dtype=float
     )
 
     ordem = np.argsort(p)
-
     ajustados = np.empty(len(p))
 
     acumulado = 0.0
@@ -522,12 +513,12 @@ def ajuste_holm(valores):
     for posicao, indice in enumerate(ordem):
         novo = min(
             1.0,
-            (len(p) - posicao) * p[indice],
+            (len(p) - posicao) * p[indice]
         )
 
         acumulado = max(
             acumulado,
-            novo,
+            novo
         )
 
         ajustados[indice] = acumulado
@@ -540,13 +531,13 @@ p_holm = ajuste_holm([
     for codigo in CODIGOS
 ])
 
-for indice, codigo in enumerate(CODIGOS):
+for i, codigo in enumerate(CODIGOS):
     resultados[codigo]["p_holm"] = float(
-        p_holm[indice]
+        p_holm[i]
     )
 
     resultados[codigo]["decisao_holm"] = decisao(
-        float(p_holm[indice])
+        float(p_holm[i])
     )
 
 
@@ -565,48 +556,51 @@ def calcular_sensibilidade(codigo):
         dtype=float
     )
 
-    posicao = int(
+    posicao_max = int(
         np.argmax(valores)
     )
 
-    reduzidos = np.delete(
+    valores_reduzidos = np.delete(
         valores,
-        posicao,
+        posicao_max
     )
 
-    novo_n = len(reduzidos)
+    novo_n = len(valores_reduzidos)
 
     novo_fpc = np.sqrt(
         (N - novo_n) / (N - 1)
     )
 
     media = float(
-        np.mean(reduzidos)
+        np.mean(valores_reduzidos)
     )
 
     desvio = float(
-        np.std(reduzidos, ddof=1)
+        np.std(
+            valores_reduzidos,
+            ddof=1
+        )
     )
 
-    estatistica = (
+    t = (
         media - HIPOTESES[codigo]["referencia"]
     ) / (
         desvio / np.sqrt(novo_n) * novo_fpc
     )
 
-    valor_p = float(
+    p = float(
         2 * stats.t.sf(
-            abs(estatistica),
-            df=novo_n - 1,
+            abs(t),
+            df=novo_n - 1
         )
     )
 
     return {
         "codigo": codigo,
         "id_extremo": int(
-            amostra.iloc[posicao]["id"]
+            amostra.iloc[posicao_max]["id"]
         ),
-        "maximo": float(valores[posicao]),
+        "maximo": float(valores[posicao_max]),
         "media_original": float(
             np.mean(valores)
         ),
@@ -615,9 +609,9 @@ def calcular_sensibilidade(codigo):
             stats.trim_mean(valores, 0.05)
         ),
         "p_original": resultados[codigo]["p"],
-        "p_sem_maximo": valor_p,
+        "p_sem_maximo": p,
         "decisao_original": resultados[codigo]["decisao"],
-        "decisao_sem_maximo": decisao(valor_p),
+        "decisao_sem_maximo": decisao(p)
     }
 
 
@@ -628,57 +622,7 @@ sensibilidade = {
 
 
 # ============================================================
-# 9. VALIDACAO COM RESULTADOS DO COLAB
-# ============================================================
-
-referencias = {
-    "P1": {
-        "estimativa": 24 / 383,
-        "p": 0.014602,
-    },
-    "P2": {
-        "estimativa": 121 / 383,
-        "p": 0.495256,
-    },
-    "M1": {
-        "estimativa": 1051 / 383,
-        "p": 0.212285,
-    },
-    "M2": {
-        "estimativa": 486 / 383,
-        "p": 0.013189,
-    },
-}
-
-resultados_conferidos = True
-
-for codigo, esperado in referencias.items():
-    r = resultados[codigo]
-
-    if not np.isclose(
-        r["estimativa"],
-        esperado["estimativa"],
-        atol=1e-8,
-    ):
-        resultados_conferidos = False
-
-    if not np.isclose(
-        r["p"],
-        esperado["p"],
-        atol=1e-5,
-    ):
-        resultados_conferidos = False
-
-if not resultados_conferidos:
-    st.error(
-        "Os resultados divergem dos valores "
-        "validados no Google Colab."
-    )
-    st.stop()
-
-
-# ============================================================
-# 10. TABELAS
+# 9. TABELAS CONSOLIDADAS
 # ============================================================
 
 def tabela_comparacao():
@@ -691,31 +635,42 @@ def tabela_comparacao():
             r["estimativa"] - r["parametro"]
         )
 
-        diferenca_texto = (
-            br(diferenca * 100, 2) + " p.p."
-            if r["tipo"] == "Proporção"
-            else br(diferenca, 3)
-        )
+        if r["tipo"] == "Proporção":
+            diferenca_texto = (
+                f"{br(diferenca * 100, 2)} p.p."
+            )
+        else:
+            diferenca_texto = br(
+                diferenca,
+                3
+            )
 
         linhas.append({
             "Teste": codigo,
             "Indicador": r["nome"],
             "População": formatar_valor(
-                r["parametro"], r["tipo"]
+                r["parametro"],
+                r["tipo"]
             ),
             "Amostra": formatar_valor(
-                r["estimativa"], r["tipo"]
+                r["estimativa"],
+                r["tipo"]
             ),
             "Diferença": diferenca_texto,
-            "Limite inferior": formatar_valor(
-                r["inferior"], r["tipo"]
-            ),
-            "Limite superior": formatar_valor(
-                r["superior"], r["tipo"]
+            "IC de 95%": (
+                formatar_valor(
+                    r["inferior"],
+                    r["tipo"]
+                )
+                + " a "
+                + formatar_valor(
+                    r["superior"],
+                    r["tipo"]
+                )
             ),
             "Contém parâmetro": (
                 "Sim" if r["contem"] else "Não"
-            ),
+            )
         })
 
     return pd.DataFrame(linhas)
@@ -731,534 +686,395 @@ def tabela_testes():
             "Teste": codigo,
             "Indicador": r["nome"],
             "Estimativa": formatar_valor(
-                r["estimativa"], r["tipo"]
+                r["estimativa"],
+                r["tipo"]
             ),
             "H0": formatar_valor(
-                r["h0"], r["tipo"]
+                r["h0"],
+                r["tipo"],
+                2
             ),
             "Estatística": br(
-                r["estatistica"], 4
+                r["estatistica"],
+                4
             ),
             "Valor-p": formato_p(r["p"]),
-            "Decisão": r["decisao"],
+            "Decisão": r["decisao"]
         })
 
     return pd.DataFrame(linhas)
 
 
 def tabela_holm():
-    return pd.DataFrame([
-        {
+    linhas = []
+
+    for codigo in CODIGOS:
+        r = resultados[codigo]
+
+        linhas.append({
             "Teste": codigo,
-            "Indicador": resultados[codigo]["nome"],
+            "Indicador": r["nome"],
             "Valor-p original": formato_p(
-                resultados[codigo]["p"]
+                r["p"]
             ),
-            "Decisão original": resultados[codigo]["decisao"],
+            "Decisão original": r["decisao"],
             "Valor-p ajustado Holm": formato_p(
-                resultados[codigo]["p_holm"]
+                r["p_holm"]
             ),
-            "Decisão Holm": resultados[codigo]["decisao_holm"],
-        }
-        for codigo in CODIGOS
-    ])
+            "Decisão Holm": r["decisao_holm"]
+        })
+
+    return pd.DataFrame(linhas)
 
 
 # ============================================================
-# 11. GRAFICOS INDIVIDUAIS DOS ICS
+# 10. GRAFICOS ORIGINAIS DE INTERVALOS DE CONFIANCA
 # ============================================================
 
-def grafico_ic_individual(codigo):
-    r = resultados[codigo]
-
-    proporcao = r["tipo"] == "Proporção"
-
-    fator = 100 if proporcao else 1
-
-    estimativa = r["estimativa"] * fator
-    parametro = r["parametro"] * fator
-    inferior = r["inferior"] * fator
-    superior = r["superior"] * fator
-
-    margem = r["margem"] * fator
-
-    unidade = "%" if proporcao else ""
-
-    minimo = min(
-        inferior,
-        parametro,
-        estimativa,
-    )
-
-    maximo = max(
-        superior,
-        parametro,
-        estimativa,
-    )
-
-    amplitude = maximo - minimo
-
-    folga = max(
-        amplitude * 0.20,
-        0.5 if proporcao else 0.05,
-    )
-
-    eixo_min = max(
-        0,
-        minimo - folga,
-    )
-
-    eixo_max = maximo + folga
-
+def grafico_intervalos(codigos, titulo):
     fig = go.Figure()
 
-    # Intervalo de confianca.
-    fig.add_trace(
-        go.Scatter(
-            x=[inferior, superior],
-            y=[0, 0],
-            mode="lines+markers",
-            name="IC 95%",
-            line=dict(
-                color=AZUL,
-                width=7,
-            ),
-            marker=dict(
-                color=AZUL,
-                size=10,
-                symbol="line-ns-open",
-                line=dict(width=3),
-            ),
-            hovertemplate=(
-                "Limite do intervalo: %{x:.4f}"
-                + unidade
-                + "<extra></extra>"
-            ),
-        )
-    )
+    for indice, codigo in enumerate(codigos):
+        r = resultados[codigo]
 
-    # Estimativa amostral.
-    fig.add_trace(
-        go.Scatter(
-            x=[estimativa],
-            y=[0],
-            mode="markers+text",
-            name="Estimativa amostral",
-            marker=dict(
-                color=AZUL,
-                size=17,
-                line=dict(
-                    color="white",
-                    width=2,
+        fator = (
+            100
+            if r["tipo"] == "Proporção"
+            else 1
+        )
+
+        estimativa = r["estimativa"] * fator
+        parametro = r["parametro"] * fator
+
+        inferior = r["inferior"] * fator
+        superior = r["superior"] * fator
+
+        rotulo = f"{codigo} — {r['nome']}"
+
+        fig.add_trace(
+            go.Scatter(
+                x=[estimativa],
+                y=[rotulo],
+                mode="markers",
+                name="Estimativa amostral",
+                marker=dict(
+                    size=13,
+                    color=AZUL
                 ),
-            ),
-            text=[
-                f"Amostra: {br(estimativa, 3)}{unidade}"
-            ],
-            textposition="top center",
-            textfont=dict(
-                color=AZUL,
-                size=13,
-            ),
-            hovertemplate=(
-                "Estimativa amostral: %{x:.4f}"
-                + unidade
-                + "<extra></extra>"
-            ),
-        )
-    )
-
-    # Parametro populacional.
-    fig.add_trace(
-        go.Scatter(
-            x=[parametro],
-            y=[0],
-            mode="markers",
-            name="Parâmetro populacional",
-            marker=dict(
-                symbol="diamond",
-                size=18,
-                color=LARANJA,
-                line=dict(
-                    color="white",
-                    width=2,
+                error_x=dict(
+                    type="data",
+                    symmetric=False,
+                    array=[superior - estimativa],
+                    arrayminus=[estimativa - inferior],
+                    thickness=3,
+                    width=7,
+                    color=AZUL
                 ),
-            ),
-            hovertemplate=(
-                "Parâmetro populacional: %{x:.4f}"
-                + unidade
-                + "<extra></extra>"
-            ),
-        )
-    )
-
-    # Indicacao dos limites.
-    for valor, rotulo in [
-        (inferior, "Limite inferior"),
-        (superior, "Limite superior"),
-    ]:
-        fig.add_annotation(
-            x=valor,
-            y=0,
-            text=(
-                rotulo
-                + "<br><b>"
-                + br(valor, 3)
-                + unidade
-                + "</b>"
-            ),
-            showarrow=True,
-            arrowhead=2,
-            ax=0,
-            ay=60,
-            font=dict(
-                size=11,
-                color=AZUL,
-            ),
-            bgcolor="rgba(255,255,255,0.92)",
+                hovertemplate=(
+                    "<b>Estimativa amostral</b>"
+                    "<br>Valor: %{x:.3f}"
+                    "<extra></extra>"
+                ),
+                showlegend=bool(indice == 0)
+            )
         )
 
-    # Identificacao do valor populacional.
-    fig.add_annotation(
-        x=parametro,
-        y=0,
-        text=(
-            "População<br><b>"
-            + br(parametro, 3)
-            + unidade
-            + "</b>"
-        ),
-        showarrow=True,
-        arrowhead=2,
-        ax=0,
-        ay=-85,
-        font=dict(
-            size=11,
-            color=LARANJA,
-        ),
-        bgcolor="rgba(255,255,255,0.92)",
-    )
+        fig.add_trace(
+            go.Scatter(
+                x=[parametro],
+                y=[rotulo],
+                mode="markers",
+                name="Parâmetro populacional",
+                marker=dict(
+                    size=14,
+                    symbol="diamond",
+                    color=LARANJA
+                ),
+                hovertemplate=(
+                    "<b>Parâmetro populacional</b>"
+                    "<br>Valor: %{x:.3f}"
+                    "<extra></extra>"
+                ),
+                showlegend=bool(indice == 0)
+            )
+        )
 
     fig.update_layout(
-        title=dict(
-            text=(
-                f"{codigo} — {r['nome']}"
-                f"<br><sup>IC 95%: "
-                f"{br(inferior, 3)}{unidade} a "
-                f"{br(superior, 3)}{unidade}"
-                f" | Margem: ±{br(margem, 4)}"
-                f"{' p.p.' if proporcao else ' pessoa(s)'}</sup>"
-            )
-        ),
+        title=titulo,
         template="plotly_white",
-        height=370,
-        xaxis=dict(
-            title=(
-                "Proporção de acidentes (%)"
-                if proporcao
-                else "Média de pessoas por acidente"
-            ),
-            range=[eixo_min, eixo_max],
-            gridcolor="#E9EDF2",
-            zeroline=False,
+        height=340,
+        font=dict(size=13),
+        xaxis_title=(
+            "Proporção (%)"
+            if codigos[0].startswith("P")
+            else "Pessoas por acidente"
         ),
         yaxis=dict(
-            visible=False,
-            range=[-0.45, 0.45],
+            categoryorder="array",
+            categoryarray=[
+                f"{codigo} — {resultados[codigo]['nome']}"
+                for codigo in reversed(codigos)
+            ]
         ),
         legend=dict(
             orientation="h",
-            x=0.5,
-            xanchor="center",
-            y=-0.32,
+            y=-0.35
         ),
         margin=dict(
-            l=40,
-            r=40,
-            t=85,
-            b=80,
-        ),
+            l=20,
+            r=30,
+            t=55,
+            b=85
+        )
     )
 
-    plotar(fig)
+    exibir_plotly(fig)
 
 
 # ============================================================
-# 12. MEMORIA DE CALCULO DOS ICS
+# 10A. GRAFICOS INDIVIDUAIS E MEMORIA DE CALCULO DOS ICs
 # ============================================================
 
-def memoria_calculo_ic(codigo):
+def grafico_ic_individual(codigo):
+    """Escala exclusiva de cada indicador; valores visiveis sem hover."""
     r = resultados[codigo]
-
-    with st.expander(
-        f"📐 Como foi calculado o IC de {codigo}?",
-        expanded=False,
-    ):
-        st.write(
-            "**Método:**",
-            (
-                "Intervalo de Wald para proporção"
-                if r["tipo"] == "Proporção"
-                else "Intervalo t de Student para média"
-            ),
+    fator = 100 if r["tipo"] == "Proporção" else 1
+    unidade = "%" if fator == 100 else " pessoas/acidente"
+    x_estimativa = r["estimativa"] * fator
+    x_populacao = r["parametro"] * fator
+    x_inferior = r["inferior"] * fator
+    x_superior = r["superior"] * fator
+    x_referencia = r["h0"] * fator
+    amplitude = max(x_superior - x_inferior, 0.001)
+    folga = max(amplitude * 0.22, 0.002)
+    minimo = min(x_inferior, x_populacao) - folga
+    maximo = max(x_superior, x_populacao) + folga
+    if fator == 100:
+        minimo = max(0, minimo)
+        maximo = min(100, maximo)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=[x_inferior, x_superior], y=[0, 0], mode="lines",
+        name="IC de 95%", line=dict(color=AZUL, width=7),
+        hovertemplate="Faixa do IC 95%<extra></extra>"
+    ))
+    fig.add_trace(go.Scatter(
+        x=[x_inferior, x_superior], y=[0, 0], mode="markers",
+        marker=dict(color=AZUL, size=12, symbol="line-ns-open", line=dict(width=3, color=AZUL)),
+        name="Limites do IC", showlegend=False,
+        hovertemplate="Limite: %{x:.4f}" + unidade + "<extra></extra>"
+    ))
+    fig.add_trace(go.Scatter(
+        x=[x_estimativa], y=[0], mode="markers", name="Estimativa amostral",
+        marker=dict(color=AZUL, size=15, line=dict(color="white", width=2)),
+        hovertemplate="Estimativa: %{x:.4f}" + unidade + "<extra></extra>"
+    ))
+    fig.add_trace(go.Scatter(
+        x=[x_populacao], y=[0], mode="markers", name="Parâmetro da população",
+        marker=dict(color=LARANJA, size=16, symbol="diamond", line=dict(color="white", width=1)),
+        hovertemplate="População: %{x:.4f}" + unidade + "<extra></extra>"
+    ))
+    # Nao marcar H0 sobre o grafico: e outra pergunta estatistica.
+    for x, y, titulo, cor in [
+        (x_inferior, -0.68, "Limite inferior", AZUL),
+        (x_superior, -0.68, "Limite superior", AZUL),
+        (x_estimativa, 0.63, "Amostra", AZUL),
+        (x_populacao, -0.30, "População", LARANJA),
+    ]:
+        fig.add_annotation(
+            x=x, y=y, xref="x", yref="y", showarrow=False,
+            text=f"{titulo}<br><b>{br(x, 2 if fator == 100 else 3)}{unidade}</b>",
+            font=dict(color=cor, size=11), bgcolor="rgba(255,255,255,.92)",
+            borderpad=3
         )
-
-        st.write(
-            "**População:**", br(N, 0),
-            "| **Amostra:**", br(n, 0),
-            "| **FPC:**", br(FPC, 6),
-        )
-
-        if r["tipo"] == "Proporção":
-            st.latex(
-                r"\hat p=\frac{x}{n}"
-            )
-
-            st.latex(
-                r"IC_{95\%}=\hat p\pm"
-                r"z_{0,975}"
-                r"\sqrt{\frac{\hat p(1-\hat p)}{n}}"
-                r"\times FPC"
-            )
-
-            st.markdown(
-                f"**Ocorrências com o evento:** "
-                f"{r['sucessos']} de {n}"
-            )
-
-            st.markdown(
-                f"**Estimativa:** "
-                f"{r['sucessos']}/{n} = "
-                f"{pct(r['estimativa'], 4)}"
-            )
-
-            st.markdown(
-                f"**Valor crítico Z:** "
-                f"{br(r['critico'], 6)}"
-            )
-
-            st.markdown(
-                f"**Erro-padrão corrigido:** "
-                f"{pct(r['erro_ic'], 6)}"
-            )
-
-            st.markdown(
-                f"**Margem de erro do IC:** "
-                f"±{br(r['margem'] * 100, 4)} "
-                f"pontos percentuais"
-            )
-
-            st.latex(
-                r"LI=\hat p-z_{0,975}\cdot EP"
-            )
-
-            st.latex(
-                r"LS=\hat p+z_{0,975}\cdot EP"
-            )
-
-            st.write(
-                "**Limite inferior:**",
-                pct(r["inferior"], 4),
-            )
-
-            st.write(
-                "**Limite superior:**",
-                pct(r["superior"], 4),
-            )
-
-        else:
-            st.latex(
-                r"\bar x=\frac{\sum x_i}{n}"
-            )
-
-            st.latex(
-                r"IC_{95\%}=\bar x\pm"
-                r"t_{0,975;n-1}"
-                r"\frac{s}{\sqrt n}\times FPC"
-            )
-
-            st.write(
-                "**Média amostral:**",
-                br(r["estimativa"], 6),
-            )
-
-            st.write(
-                "**Desvio-padrão amostral:**",
-                br(r["desvio"], 6),
-            )
-
-            st.write(
-                "**Graus de liberdade:**",
-                GL,
-            )
-
-            st.write(
-                "**Valor crítico t:**",
-                br(r["critico"], 6),
-            )
-
-            st.write(
-                "**Erro-padrão corrigido:**",
-                br(r["erro_ic"], 6),
-            )
-
-            st.write(
-                "**Margem do IC:**",
-                "±" + br(r["margem"], 6),
-            )
-
-            st.write(
-                "**Limite inferior:**",
-                br(r["inferior"], 6),
-            )
-
-            st.write(
-                "**Limite superior:**",
-                br(r["superior"], 6),
-            )
-
-        st.info(
-            "A hipótese nula utilizada no teste "
-            "não determina os limites deste IC. "
-            "O intervalo é calculado a partir "
-            "da estimativa e da variabilidade amostral."
-        )
+    fig.update_layout(
+        title=f"{codigo} — {r['nome']} | IC 95% em escala ampliada",
+        template="plotly_white", height=350, font=dict(size=12),
+        xaxis=dict(title="Proporção de acidentes (%)" if fator == 100 else "Média por acidente",
+                   range=[minimo, maximo], gridcolor="#E9EDF2", zeroline=False),
+        yaxis=dict(range=[-1.1, 1.1], visible=False),
+        legend=dict(orientation="h", x=0.5, xanchor="center", y=-0.31),
+        margin=dict(l=35, r=35, t=70, b=90),
+    )
+    exibir_plotly(fig)
 
 
-# ============================================================
-# 13. INTERPRETACAO INDIVIDUAL DOS ICS
-# ============================================================
-
-def interpretacao_ic(codigo):
+def explicar_ic(codigo):
+    """Inclui contas detalhadas, sem confundir IC com teste de H0."""
     r = resultados[codigo]
-
-    diferenca = (
-        r["estimativa"] - r["parametro"]
-    )
-
-    if r["tipo"] == "Proporção":
-        unidade = "pontos percentuais"
-
-        diferenca_texto = (
-            br(abs(diferenca) * 100, 4)
-        )
-
-    else:
-        unidade = "pessoas por acidente"
-
-        diferenca_texto = br(
-            abs(diferenca),
-            4,
-        )
-
-    direcao = (
-        "acima"
-        if diferenca > 0
-        else "abaixo"
-    )
-
-    if np.isclose(diferenca, 0):
-        direcao = "igual ao"
-
+    proporcao = r["tipo"] == "Proporção"
+    fator = 100 if proporcao else 1
+    unidade = " pontos percentuais" if proporcao else " pessoa(s) por acidente"
+    dif = (r["estimativa"] - r["parametro"]) * fator
     st.markdown(
-        f"**Interpretação — {codigo}:** "
-        f"A estimativa amostral foi "
-        f"**{formatar_valor(r['estimativa'], r['tipo'])}**, "
-        f"com IC de 95% entre "
-        f"**{formatar_valor(r['inferior'], r['tipo'])}** "
-        f"e **{formatar_valor(r['superior'], r['tipo'])}**. "
-        f"O parâmetro populacional é "
-        f"**{formatar_valor(r['parametro'], r['tipo'])}** "
-        f"e está "
-        f"**{'dentro' if r['contem'] else 'fora'}** "
-        f"do intervalo."
+        f"**Leitura:** a estimativa foi **{formatar_valor(r['estimativa'], r['tipo'])}**, "
+        f"e o parâmetro calculado na população foi **{formatar_valor(r['parametro'], r['tipo'])}**. "
+        f"A diferença amostra − população é **{br(dif, 2 if proporcao else 3)}{unidade}**. "
+        f"O IC de 95% vai de **{formatar_valor(r['inferior'], r['tipo'])}** "
+        f"até **{formatar_valor(r['superior'], r['tipo'])}**, "
+        + ("incluindo" if r["contem"] else "não incluindo")
+        + " o parâmetro populacional conhecido."
     )
-
     st.caption(
-        f"Diferença amostra − população: "
-        f"{diferenca_texto} {unidade} "
-        f"({direcao} do valor populacional)."
+        "O intervalo estima o parâmetro populacional usando os dados da amostra; "
+        "o valor de referência de H0 é utilizado separadamente no teste de hipóteses."
     )
+    with st.expander(f"🧮 Memória de cálculo do IC — {codigo}", expanded=False):
+        if proporcao:
+            st.markdown(
+                f"**Evento observado:** {HIPOTESES[codigo]['evento']}. "
+                f"Ocorrências com evento: **{r['sucessos_amostrais']}** de **{n}**."
+            )
+            st.latex(r"\hat p = \frac{x}{n}")
+            st.code(f"p estimado = {r['sucessos_amostrais']} / {n} = {br(r['estimativa'], 8)} = {pct(r['estimativa'], 4)}")
+            st.latex(r"EP_{IC}=\sqrt{\frac{\hat p(1-\hat p)}{n}} \times FPC")
+            st.latex(r"IC_{95\%}=\hat p \pm z_{0,975}\times EP_{IC}")
+            st.code(
+                f"FPC = {br(FPC, 6)}\n"
+                f"EP = raiz({br(r['estimativa'], 8)} × (1 - {br(r['estimativa'], 8)}) / {n}) × {br(FPC, 6)} "
+                f"= {br(r['erro_padrao_ic'], 8)}\n"
+                f"Margem = {br(Z_CRITICO, 6)} × {br(r['erro_padrao_ic'], 8)} × 100 "
+                f"= {br(r['margem_ic'] * 100, 4)} pontos percentuais\n"
+                f"Inferior = {pct(r['estimativa'], 4)} - {br(r['margem_ic']*100, 4)} p.p. = {pct(r['inferior'], 4)}\n"
+                f"Superior = {pct(r['estimativa'], 4)} + {br(r['margem_ic']*100, 4)} p.p. = {pct(r['superior'], 4)}"
+            )
+            st.caption("Wald bilateral com FPC; limites restringidos ao intervalo [0, 1] quando necessário.")
+        else:
+            st.latex(r"EP_{IC}=\frac{s}{\sqrt{n}}\times FPC")
+            st.latex(r"IC_{95\%}=\bar x\pm t_{0,975;n-1}\times EP_{IC}")
+            st.code(
+                f"Média amostral = {br(r['estimativa'], 6)}\n"
+                f"Desvio-padrão amostral s = {br(r['desvio_amostral'], 6)}\n"
+                f"FPC = {br(FPC, 6)}; graus de liberdade = {GL}\n"
+                f"EP = {br(r['desvio_amostral'], 6)} / raiz({n}) × {br(FPC, 6)} "
+                f"= {br(r['erro_padrao_ic'], 8)}\n"
+                f"Margem = {br(T_CRITICO, 6)} × {br(r['erro_padrao_ic'], 8)} "
+                f"= {br(r['margem_ic'], 6)} pessoa(s)\n"
+                f"Inferior = {br(r['estimativa'], 6)} - {br(r['margem_ic'], 6)} = {br(r['inferior'], 6)}\n"
+                f"Superior = {br(r['estimativa'], 6)} + {br(r['margem_ic'], 6)} = {br(r['superior'], 6)}"
+            )
+        st.info("95% de confiança descreve o desempenho do procedimento em repetidas amostragens, não a probabilidade de um parâmetro fixo estar neste intervalo específico.")
+
+
+def cartao_ic(codigo):
+    r = resultados[codigo]
+    proporcao = r["tipo"] == "Proporção"
+    st.subheader(f"{codigo} — {r['nome']}")
+    a,b,c,d = st.columns(4)
+    a.metric("Estimativa da amostra", formatar_valor(r["estimativa"], r["tipo"]))
+    b.metric("Limite inferior (95%)", formatar_valor(r["inferior"], r["tipo"]))
+    c.metric("Limite superior (95%)", formatar_valor(r["superior"], r["tipo"]))
+    d.metric("População conhecida", formatar_valor(r["parametro"], r["tipo"]))
+    st.caption(
+        "Margem calculada: ±" + br(r["margem_ic"] * (100 if proporcao else 1), 4)
+        + (" pontos percentuais" if proporcao else " pessoa(s) por acidente")
+        + ". Os extremos do IC usam a precisão integral dos cálculos."
+    )
+    grafico_ic_individual(codigo)
+    explicar_ic(codigo)
 
 
 # ============================================================
-# 14. GRAFICOS COMPARATIVOS
+# 11. NOVOS GRAFICOS DE BARRAS COM IC DE 95%
+# ETAPA 13.4 DO COLAB
 # ============================================================
 
-def grafico_comparativo(codigos, titulo):
+def grafico_barras_comparativo(codigos, titulo):
+    primeiro = resultados[codigos[0]]
+
     proporcao = (
-        resultados[codigos[0]]["tipo"]
-        == "Proporção"
+        primeiro["tipo"] == "Proporção"
     )
 
     fator = 100 if proporcao else 1
 
     categorias = [
-        f"{c} — {resultados[c]['nome']}"
-        for c in codigos
+        f"{codigo} — {resultados[codigo]['nome']}"
+        for codigo in codigos
     ]
 
-    pop = [
-        resultados[c]["parametro"] * fator
-        for c in codigos
+    valores_pop = [
+        resultados[codigo]["parametro"] * fator
+        for codigo in codigos
     ]
 
-    amo = [
-        resultados[c]["estimativa"] * fator
-        for c in codigos
+    valores_amostra = [
+        resultados[codigo]["estimativa"] * fator
+        for codigo in codigos
     ]
 
-    limites_inf = [
-        resultados[c]["inferior"] * fator
-        for c in codigos
+    inferiores = [
+        resultados[codigo]["inferior"] * fator
+        for codigo in codigos
     ]
 
-    limites_sup = [
-        resultados[c]["superior"] * fator
-        for c in codigos
-    ]
-
-    erros_inf = [
-        valor - limite
-        for valor, limite in zip(amo, limites_inf)
+    superiores = [
+        resultados[codigo]["superior"] * fator
+        for codigo in codigos
     ]
 
     erros_sup = [
-        limite - valor
-        for valor, limite in zip(amo, limites_sup)
+        sup - estimativa
+        for sup, estimativa in zip(
+            superiores,
+            valores_amostra
+        )
     ]
 
-    unidade = "%" if proporcao else ""
+    erros_inf = [
+        estimativa - inf
+        for estimativa, inf in zip(
+            valores_amostra,
+            inferiores
+        )
+    ]
 
+    sufixo = "%" if proporcao else ""
     casas = 2 if proporcao else 3
+
+    textos_pop = [
+        f"{valor:.{casas}f}{sufixo}"
+        for valor in valores_pop
+    ]
+
+    textos_amostra = [
+        f"{valor:.{casas}f}{sufixo}"
+        for valor in valores_amostra
+    ]
+
+    dados_ic = np.column_stack([
+        inferiores,
+        superiores
+    ])
 
     fig = go.Figure()
 
     fig.add_trace(
         go.Bar(
             x=categorias,
-            y=pop,
+            y=valores_pop,
             name="População",
             marker_color=AZUL,
-            text=[
-                f"{v:.{casas}f}{unidade}"
-                for v in pop
-            ],
+            text=textos_pop,
             textposition="outside",
             cliponaxis=False,
+            hovertemplate=(
+                "%{x}"
+                "<br>Parâmetro populacional: "
+                "%{y:.4f}"
+                + sufixo
+                + "<extra></extra>"
+            )
         )
     )
 
     fig.add_trace(
         go.Bar(
             x=categorias,
-            y=amo,
+            y=valores_amostra,
             name="Amostra (IC 95%)",
             marker_color=LARANJA,
-            text=[
-                f"{v:.{casas}f}{unidade}"
-                for v in amo
-            ],
+            text=textos_amostra,
             textposition="outside",
             cliponaxis=False,
             error_y=dict(
@@ -1268,63 +1084,114 @@ def grafico_comparativo(codigos, titulo):
                 arrayminus=erros_inf,
                 visible=True,
                 color="#7C2D12",
-                width=7,
                 thickness=2,
+                width=7
             ),
-            customdata=np.column_stack([
-                limites_inf,
-                limites_sup,
-            ]),
+            customdata=dados_ic,
             hovertemplate=(
-                "Estimativa: %{y:.4f}"
-                + unidade
+                "%{x}"
+                "<br>Estimativa: %{y:.4f}"
+                + sufixo
                 + "<br>IC 95%: "
-                + "%{customdata[0]:.4f} a "
-                + "%{customdata[1]:.4f}"
-                + unidade
+                "[%{customdata[0]:.4f}; "
+                "%{customdata[1]:.4f}]"
+                + sufixo
                 + "<extra></extra>"
-            ),
+            )
         )
     )
 
     maximo = max(
-        max(pop),
-        max(limites_sup),
+        max(valores_pop),
+        max(superiores)
     )
 
     fig.update_layout(
         title=titulo,
         template="plotly_white",
+        height=500,
         barmode="group",
-        height=470,
+        bargap=0.28,
+        bargroupgap=0.08,
+        font=dict(size=13),
+        xaxis=dict(
+            title="Indicador",
+            showgrid=False
+        ),
         yaxis=dict(
             title=(
-                "Proporção (%)"
+                "Proporção de acidentes (%)"
                 if proporcao
-                else "Pessoas por acidente"
+                else "Média de pessoas por acidente"
             ),
             range=[0, maximo * 1.25],
+            gridcolor="#E9EDF2"
         ),
         legend=dict(
             orientation="h",
             x=0.5,
             xanchor="center",
-            y=-0.25,
+            y=-0.25
         ),
         margin=dict(
             l=45,
             r=35,
             t=75,
-            b=90,
-        ),
+            b=100
+        )
     )
 
-    plotar(fig)
+    exibir_plotly(fig)
 
 
 # ============================================================
-# 15. CURVAS Z E T
+# 12. NOVAS CURVAS Z E T DE STUDENT
+# ETAPAS 13.2 E 13.3 DO COLAB
 # ============================================================
+
+def adicionar_area_curva(
+    fig,
+    inicio,
+    fim,
+    distribuicao,
+    gl,
+    cor,
+    nome,
+    mostrar_legenda,
+    grupo
+):
+    x_area = np.linspace(
+        float(inicio),
+        float(fim),
+        350
+    )
+
+    if distribuicao == "Z":
+        y_area = stats.norm.pdf(x_area)
+    else:
+        y_area = stats.t.pdf(
+            x_area,
+            df=gl
+        )
+
+    fig.add_trace(
+        go.Scatter(
+            x=x_area,
+            y=y_area,
+            mode="lines",
+            line=dict(
+                width=0,
+                color=cor
+            ),
+            fill="tozeroy",
+            fillcolor=cor,
+            name=nome,
+            legendgroup=grupo,
+            showlegend=bool(mostrar_legenda),
+            hoverinfo="skip"
+        )
+    )
+
 
 def grafico_curva_teste(codigo):
     r = resultados[codigo]
@@ -1333,7 +1200,7 @@ def grafico_curva_teste(codigo):
         r["tipo"] == "Proporção"
     )
 
-    nome_teste = (
+    distribuicao = (
         "Z" if proporcao else "t"
     )
 
@@ -1343,240 +1210,328 @@ def grafico_curva_teste(codigo):
         else T_CRITICO
     )
 
-    observado = r["estatistica"]
-
-    x = np.linspace(
-        -4.5,
-        4.5,
-        1400,
+    observado = float(
+        r["estatistica"]
     )
 
-    def densidade(valores):
-        if proporcao:
-            return stats.norm.pdf(valores)
+    valor_p = float(
+        r["p"]
+    )
 
-        return stats.t.pdf(
-            valores,
-            df=GL,
+    x_min = -4.5
+    x_max = 4.5
+
+    x = np.linspace(
+        x_min,
+        x_max,
+        1800
+    )
+
+    if proporcao:
+        y = stats.norm.pdf(x)
+
+        densidade_observada = float(
+            stats.norm.pdf(observado)
         )
 
-    y = densidade(x)
+        titulo_distribuicao = (
+            "Distribuição normal padrão"
+        )
+    else:
+        y = stats.t.pdf(
+            x,
+            df=GL
+        )
+
+        densidade_observada = float(
+            stats.t.pdf(
+                observado,
+                df=GL
+            )
+        )
+
+        titulo_distribuicao = (
+            f"Distribuição t de Student (gl = {GL})"
+        )
 
     fig = go.Figure()
 
-    for inicio, fim in [
-        (-4.5, -critico),
-        (critico, 4.5),
-    ]:
-        xx = np.linspace(
-            inicio,
-            fim,
-            300,
-        )
+    # Regioes criticas: 2,5% em cada cauda.
+    adicionar_area_curva(
+        fig,
+        x_min,
+        -critico,
+        distribuicao,
+        GL,
+        "rgba(220,38,38,0.18)",
+        "Região crítica (α = 5%)",
+        True,
+        "critica"
+    )
 
-        fig.add_trace(
-            go.Scatter(
-                x=xx,
-                y=densidade(xx),
-                mode="lines",
-                line=dict(width=0),
-                fill="tozeroy",
-                fillcolor="rgba(220,38,38,0.20)",
-                name="Região crítica",
-                showlegend=False,
-                hoverinfo="skip",
-            )
-        )
+    adicionar_area_curva(
+        fig,
+        critico,
+        x_max,
+        distribuicao,
+        GL,
+        "rgba(220,38,38,0.18)",
+        "Região crítica (α = 5%)",
+        False,
+        "critica"
+    )
 
-    for inicio, fim in [
-        (-4.5, -abs(observado)),
-        (abs(observado), 4.5),
-    ]:
-        xx = np.linspace(
-            inicio,
-            fim,
-            300,
-        )
+    # Areas correspondentes ao valor-p bilateral.
+    limite_p = abs(observado)
 
-        fig.add_trace(
-            go.Scatter(
-                x=xx,
-                y=densidade(xx),
-                mode="lines",
-                line=dict(width=0),
-                fill="tozeroy",
-                fillcolor="rgba(245,158,11,0.38)",
-                name="Área do valor-p",
-                showlegend=False,
-                hoverinfo="skip",
-            )
-        )
+    adicionar_area_curva(
+        fig,
+        x_min,
+        -limite_p,
+        distribuicao,
+        GL,
+        "rgba(245,158,11,0.42)",
+        "Área bilateral do valor-p",
+        True,
+        "pvalor"
+    )
 
+    adicionar_area_curva(
+        fig,
+        limite_p,
+        x_max,
+        distribuicao,
+        GL,
+        "rgba(245,158,11,0.42)",
+        "Área bilateral do valor-p",
+        False,
+        "pvalor"
+    )
+
+    # Curva teorica sob H0.
     fig.add_trace(
         go.Scatter(
             x=x,
             y=y,
             mode="lines",
-            name="Distribuição sob H0",
+            name=titulo_distribuicao,
             line=dict(
                 color=AZUL,
-                width=3,
+                width=3
             ),
+            showlegend=True,
+            hovertemplate=(
+                "Estatística: %{x:.3f}"
+                "<br>Densidade: %{y:.5f}"
+                "<extra></extra>"
+            )
         )
     )
 
+    # Valores criticos.
     for valor in [-critico, critico]:
+        valor = float(valor)
+
         fig.add_vline(
-            x=float(valor),
+            x=valor,
             line_dash="dash",
             line_color=VERMELHO,
-            line_width=2,
+            line_width=2
         )
 
+        fig.add_annotation(
+            x=valor,
+            y=0.40,
+            text=(
+                f"{distribuicao} crítico = "
+                f"{br(valor, 4)}"
+            ),
+            showarrow=False,
+            font=dict(
+                size=10,
+                color=VERMELHO
+            ),
+            bgcolor="rgba(255,255,255,0.85)"
+        )
+
+    # Estatistica observada.
     fig.add_vline(
-        x=float(observado),
+        x=observado,
         line_color=VERDE,
-        line_width=3,
+        line_width=3
     )
 
     fig.add_annotation(
-        x=float(observado),
-        y=float(densidade(observado)),
+        x=observado,
+        y=densidade_observada,
         text=(
-            f"{nome_teste} observado = "
-            f"{br(observado, 4)}"
+            f"{distribuicao} observado = "
+            f"{observado:+.4f}"
         ),
         showarrow=True,
         arrowhead=2,
         ax=0,
         ay=-55,
-        font=dict(color=VERDE),
-        bgcolor="white",
+        font=dict(
+            color=VERDE,
+            size=11
+        ),
+        bgcolor="white"
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=[observado],
+            y=[0],
+            mode="markers",
+            marker=dict(
+                color=VERDE,
+                size=10
+            ),
+            name=f"{distribuicao} observado",
+            showlegend=True,
+            hovertemplate=(
+                f"Estatística: {observado:+.6f}"
+                "<extra></extra>"
+            )
+        )
+    )
+
+    situacao = (
+        "REJEITAR H0"
+        if valor_p < ALFA
+        else "NÃO REJEITAR H0"
     )
 
     fig.update_layout(
         title=dict(
             text=(
                 f"{codigo} — {r['nome']}"
-                "<br><sup>"
-                f"Valor-p = {formato_p(r['p'])} | "
-                f"{r['decisao']}"
-                "</sup>"
-            )
+                f"<br><sup>Valor-p bilateral = "
+                f"{valor_p:.6f} | "
+                f"Decisão individual: {situacao}</sup>"
+            ),
+            x=0.5
         ),
         template="plotly_white",
-        height=480,
+        height=520,
+        font=dict(size=12),
         xaxis=dict(
-            title=f"Estatística {nome_teste}",
-            range=[-4.5, 4.5],
+            title=(
+                "Estatística Z"
+                if proporcao
+                else f"Estatística t (gl = {GL})"
+            ),
+            range=[x_min, x_max],
+            zeroline=True,
+            zerolinecolor="#94A3B8"
         ),
         yaxis=dict(
-            title="Densidade",
+            title="Densidade de probabilidade",
             range=[0, 0.48],
+            gridcolor="#E9EDF2"
+        ),
+        legend=dict(
+            orientation="h",
+            x=0.5,
+            xanchor="center",
+            y=-0.30
         ),
         margin=dict(
-            l=40,
+            l=45,
             r=30,
-            t=95,
-            b=60,
-        ),
+            t=100,
+            b=105
+        )
     )
 
-    plotar(fig)
+    exibir_plotly(fig)
+
+
+def interpretacao_curva(codigo):
+    """Interpretação completa da posição do teste e das áreas do gráfico."""
+    r = resultados[codigo]
+    estat = float(r["estatistica"])
+    crit = Z_CRITICO if r["tipo"] == "Proporção" else T_CRITICO
+    simbolo = "Z" if r["tipo"] == "Proporção" else "t"
+    fora = abs(estat) > crit
+    comparacao = (
+        f"|{br(estat, 4)}| > {br(crit, 4)}"
+        if fora else f"|{br(estat, 4)}| ≤ {br(crit, 4)}"
+    )
+    conclusao = (
+        "está fora dos limites críticos e **rejeita H₀ no teste individual**"
+        if fora else
+        "está entre os limites críticos e **não rejeita H₀ no teste individual**"
+    )
+    st.markdown(
+        f"**Interpretação — {codigo}:** A estatística observada foi "
+        f"**{simbolo} = {br(estat, 4)}**. Os limites críticos bilaterais "
+        f"são **−{br(crit, 4)} e +{br(crit, 4)}** "
+        f"(2,5% em cada cauda). Como **{comparacao}**, o resultado "
+        f"{conclusao}. O valor-p bilateral é **{formato_p(r['p'])}**; "
+        f"compare com α = 0,05."
+    )
+    st.caption(
+        "Azul: distribuição teórica sob H₀; linhas vermelhas: limites "
+        "críticos; verde: estatística observada; laranja: caudas "
+        "consideradas no valor-p bilateral. As regiões podem se sobrepor. "
+        "Essas decisões são individuais, sem o ajuste de Holm."
+    )
 
 
 # ============================================================
-# 16. EXPLICACAO DOS TESTES
+# 13. VALIDACAO NUMERICA DAS VISUALIZACOES
 # ============================================================
 
-def explicacao_teste(codigo):
+referencias = {
+    "P1": {
+        "estimativa": 24 / 383,
+        "p": 0.014602
+    },
+    "P2": {
+        "estimativa": 121 / 383,
+        "p": 0.495256
+    },
+    "M1": {
+        "estimativa": 1051 / 383,
+        "p": 0.212285
+    },
+    "M2": {
+        "estimativa": 486 / 383,
+        "p": 0.013189
+    }
+}
+
+resultados_conferidos = True
+
+for codigo, esperado in referencias.items():
     r = resultados[codigo]
 
-    h = HIPOTESES[codigo]
+    if not np.isclose(
+        r["estimativa"],
+        esperado["estimativa"],
+        atol=1e-8
+    ):
+        resultados_conferidos = False
 
-    st.markdown(
-        f"**Questão investigada:** {h['pergunta']}"
+    if not np.isclose(
+        r["p"],
+        esperado["p"],
+        atol=1e-5
+    ):
+        resultados_conferidos = False
+
+if not resultados_conferidos:
+    st.error(
+        "Os resultados inferenciais divergem dos "
+        "valores validados no Google Colab."
     )
-
-    if r["tipo"] == "Proporção":
-        st.latex(
-            rf"H_0:p={r['h0']:.2f}"
-        )
-
-        st.latex(
-            rf"H_1:p\neq{r['h0']:.2f}"
-        )
-
-        st.latex(
-            r"Z=\frac{\hat p-p_0}"
-            r"{\sqrt{\frac{p_0(1-p_0)}{n}}\cdot FPC}"
-        )
-
-    else:
-        st.latex(
-            rf"H_0:\mu={r['h0']:.0f}"
-        )
-
-        st.latex(
-            rf"H_1:\mu\neq{r['h0']:.0f}"
-        )
-
-        st.latex(
-            r"t=\frac{\bar x-\mu_0}"
-            r"{\frac{s}{\sqrt n}\cdot FPC}"
-        )
-
-    c1, c2, c3 = st.columns(3)
-
-    c1.metric(
-        "Estimativa",
-        formatar_valor(
-            r["estimativa"],
-            r["tipo"],
-        ),
-    )
-
-    c2.metric(
-        "Estatística de teste",
-        br(r["estatistica"], 4),
-    )
-
-    c3.metric(
-        "Valor-p",
-        formato_p(r["p"]),
-    )
-
-    st.markdown(
-        f"**Valor de referência de H0:** "
-        f"{formatar_valor(r['h0'], r['tipo'])}"
-    )
-
-    st.markdown(
-        f"**Nível de significância:** "
-        f"{pct(ALFA, 0)}"
-    )
-
-    if r["p"] < ALFA:
-        st.success(
-            "O valor-p é inferior a 0,05. "
-            "Rejeitamos H0 no teste individual."
-        )
-
-    else:
-        st.info(
-            "O valor-p é igual ou superior a 0,05. "
-            "Não rejeitamos H0 no teste individual."
-        )
-
-    st.caption(
-        "O valor-p não representa a probabilidade "
-        "de H0 ser verdadeira. Não rejeitar H0 "
-        "também não comprova igualdade."
-    )
+    st.stop()
 
 
 # ============================================================
-# 17. MENU LATERAL
+# 14. MENU LATERAL
 # ============================================================
 
 MENU = [
@@ -1585,25 +1540,22 @@ MENU = [
     "Testes de hipóteses",
     "Sensibilidade",
     "Ajuste de Holm",
-    "Metodologia",
+    "Metodologia"
 ]
 
 st.sidebar.title("PRF Analytics 2025")
-
-st.sidebar.markdown(
-    "### Dashboard 3 — Inferência"
-)
+st.sidebar.markdown("### Dashboard 3 — Inferência")
 
 st.sidebar.info(
     "Os procedimentos inferenciais utilizam "
     "sempre os 383 registros originais, "
-    "sem filtros e sem novos sorteios."
+    "sem filtros ou novos sorteios."
 )
 
 secao = st.sidebar.radio(
     "Selecione a seção",
     MENU,
-    key="menu_inferencia_v13",
+    key="menu_inferencia_v12"
 )
 
 st.sidebar.divider()
@@ -1614,84 +1566,76 @@ st.sidebar.caption(
 
 
 # ============================================================
-# 18. CABECALHO
+# 15. CABECALHO COMUM
 # ============================================================
 
-st.title(
-    "📈 Inferência estatística e comparação"
-)
-
-st.caption(
-    "PRF Analytics 2025 — Dashboard 3"
-)
+st.title("📈 Inferência estatística e comparação")
+st.caption("PRF Analytics 2025 — Dashboard 3")
 
 st.markdown(
     """
     Estudo de **72.529 acidentes da PRF em 2025**,
     com amostra aleatória simples de **383 ocorrências**.
 
-    **Confiança:** 95% |
-    **Significância:** 5% |
-    **Testes:** bilaterais |
-    **Amostra:** preservada.
+    Confiança: **95%** | Significância: **5%** |
+    Testes: **bilaterais** | Amostra: **preservada**
     """
 )
 
 st.divider()
 
-
 total_cobertura = sum(
-    int(resultados[c]["contem"])
-    for c in CODIGOS
+    int(resultados[codigo]["contem"])
+    for codigo in CODIGOS
 )
 
 rejeicoes = sum(
-    int(resultados[c]["p"] < ALFA)
-    for c in CODIGOS
+    int(resultados[codigo]["p"] < ALFA)
+    for codigo in CODIGOS
 )
 
 rejeicoes_holm = sum(
-    int(resultados[c]["p_holm"] < ALFA)
-    for c in CODIGOS
+    int(resultados[codigo]["p_holm"] < ALFA)
+    for codigo in CODIGOS
 )
 
 
 # ============================================================
-# 19. VISAO GERAL
+# 16. VISAO GERAL
 # ============================================================
 
 if secao == "Visão geral":
-    st.header(
-        "Visão geral dos resultados"
-    )
+    st.header("Visão geral dos resultados")
 
     c1, c2, c3, c4 = st.columns(4)
 
     c1.metric(
         "Parâmetros analisados",
-        "4",
+        "4"
     )
 
     c2.metric(
         "ICs com cobertura",
-        f"{total_cobertura} de 4",
+        f"{total_cobertura} de 4"
     )
 
     c3.metric(
         "Rejeições individuais",
-        rejeicoes,
+        rejeicoes
     )
 
     c4.metric(
         "Rejeições após Holm",
-        rejeicoes_holm,
+        rejeicoes_holm
     )
 
     st.caption(
         f"População: {br(N, 0)} | "
         f"Amostra: {br(n, 0)} | "
-        f"FPC: {br(FPC, 6)}"
+        f"Correção para população finita: {br(FPC, 6)}"
     )
+
+    st.divider()
 
     st.subheader(
         "Comparação entre população e amostra"
@@ -1700,333 +1644,409 @@ if secao == "Visão geral":
     st.dataframe(
         tabela_comparacao(),
         hide_index=True,
-        width="stretch",
+        width="stretch"
     )
 
-    st.subheader(
-        "Resumo dos testes"
+    st.caption(
+        "Diferença = estimativa amostral − "
+        "parâmetro populacional. "
+        "Proporções em pontos percentuais; "
+        "médias em pessoas por acidente."
     )
+
+    st.subheader("Resumo dos testes")
 
     st.dataframe(
         tabela_testes(),
         hide_index=True,
-        width="stretch",
+        width="stretch"
     )
 
-    st.subheader(
-        "Principais conclusões"
-    )
+    st.subheader("Principais conclusões")
 
     st.markdown(
         """
         **Intervalos de confiança:** os quatro
         intervalos de 95% incluíram os respectivos
-        parâmetros populacionais.
+        parâmetros populacionais conhecidos.
 
         **Testes individuais:** P1 e M2 rejeitaram
-        H0. P2 e M1 não apresentaram evidência
-        suficiente para rejeição.
+        suas hipóteses nulas. P2 e M1 não apresentaram
+        evidências suficientes para rejeição.
 
         **Ajuste de Holm:** nenhuma hipótese nula
-        permaneceu rejeitada após a correção.
+        permaneceu rejeitada após o controle
+        do erro familiar de 5%.
 
-        **Sensibilidade:** valores extremos
-        influenciaram principalmente as médias.
+        **Valores extremos:** a análise de
+        sensibilidade identificou influência
+        relevante de observações extremas
+        sobre os resultados das médias.
 
-        **Limitação:** os resultados referem-se
-        à população operacional estudada.
+        **Interpretação:** significância estatística
+        não implica necessariamente relevância
+        prática ou relação causal.
         """
     )
 
     st.info(
-        "Utilize o menu lateral para explorar "
-        "os gráficos e a memória de cálculo."
+        "Selecione uma seção no menu lateral "
+        "para visualizar os gráficos e as "
+        "análises detalhadas."
     )
 
 
 # ============================================================
-# 20. INTERVALOS DE CONFIANCA
+# 17. INTERVALOS DE CONFIANCA
 # ============================================================
 
 elif secao == "Intervalos de confiança":
-    st.header(
-        "Intervalos de confiança de 95%"
+    st.header("Intervalos de confiança de 95%")
+
+    st.markdown(
+        """
+        Os pontos azuis representam as estimativas
+        amostrais e as barras seus intervalos
+        de confiança.
+
+        Os losangos laranja representam os parâmetros
+        conhecidos da população operacional.
+        """
+    )
+
+    st.info(
+        "Cada indicador possui uma escala própria para facilitar a leitura. "
+        "Os valores aparecem também nos cartões e na memória de cálculo."
+    )
+
+    st.subheader("Parâmetros de proporção")
+    for codigo in ["P1", "P2"]:
+        cartao_ic(codigo)
+        st.divider()
+
+    st.subheader("Parâmetros de média")
+    for codigo in ["M1", "M2"]:
+        cartao_ic(codigo)
+        st.divider()
+
+    with st.expander("Visualizações originais conjuntas (comparação geral)"):
+        grafico_intervalos(
+            ["P1", "P2"],
+            "Intervalos de confiança — Proporções"
+        )
+        grafico_intervalos(
+            ["M1", "M2"],
+            "Intervalos de confiança — Médias"
+        )
+
+    st.subheader("Resultados numéricos")
+
+    st.dataframe(
+        tabela_comparacao(),
+        width="stretch",
+        hide_index=True
+    )
+
+    st.success(
+        "Os quatro intervalos de confiança "
+        "abrangeram seus respectivos parâmetros "
+        "populacionais nesta amostra."
     )
 
     st.markdown(
         """
-        **Como interpretar os gráficos:**
+        **Interpretação estatística**
 
-        - A linha azul representa o intervalo de confiança.
-        - O ponto azul representa a estimativa amostral.
-        - O losango laranja representa o parâmetro populacional.
-        - Os limites e a margem são calculados a partir da amostra.
+        As estimativas amostrais não coincidiram
+        exatamente com os parâmetros populacionais,
+        mas os intervalos apresentaram cobertura
+        nesta realização específica.
 
-        Cada indicador possui sua própria escala para
-        facilitar a visualização.
+        O nível de confiança de 95% refere-se
+        à frequência esperada de cobertura do
+        procedimento em repetidas amostragens,
+        sob as condições do método.
+
+        Isso não comprova, isoladamente, a
+        representatividade da amostra.
         """
     )
 
-    st.info(
-        "O intervalo de confiança fornece uma faixa "
-        "de valores plausíveis para o parâmetro. "
-        "O nível de 95% representa a cobertura esperada "
-        "do procedimento em repetidas amostragens."
-    )
-
-    for codigo in CODIGOS:
-        st.divider()
-
-        st.subheader(
-            f"{codigo} — {resultados[codigo]['nome']}"
-        )
-
-        r = resultados[codigo]
-
-        c1, c2, c3, c4 = st.columns(4)
-
-        c1.metric(
-            "Estimativa amostral",
-            formatar_valor(
-                r["estimativa"],
-                r["tipo"],
-            ),
-        )
-
-        c2.metric(
-            "Limite inferior",
-            formatar_valor(
-                r["inferior"],
-                r["tipo"],
-            ),
-        )
-
-        c3.metric(
-            "Limite superior",
-            formatar_valor(
-                r["superior"],
-                r["tipo"],
-            ),
-        )
-
-        c4.metric(
-            "Parâmetro populacional",
-            formatar_valor(
-                r["parametro"],
-                r["tipo"],
-            ),
-        )
-
-        grafico_ic_individual(codigo)
-
-        interpretacao_ic(codigo)
-
-        memoria_calculo_ic(codigo)
-
     st.divider()
-
-    st.subheader(
-        "Resultados numéricos consolidados"
-    )
-
-    st.dataframe(
-        tabela_comparacao(),
-        hide_index=True,
-        width="stretch",
-    )
-
-    st.success(
-        "Os quatro intervalos de 95% incluíram "
-        "seus respectivos parâmetros populacionais."
-    )
 
     st.subheader(
         "Comparação gráfica — População x Amostra"
     )
 
     st.caption(
-        "Os gráficos abaixo oferecem uma visão conjunta. "
-        "As barras de erro aparecem somente nas "
-        "estimativas amostrais."
+        "Visualizações complementares da Etapa 13.4 "
+        "do Google Colab. As barras de erro representam "
+        "exclusivamente os ICs das estimativas amostrais."
     )
 
-    grafico_comparativo(
+    grafico_barras_comparativo(
         ["P1", "P2"],
-        "Proporções — População x Amostra (IC 95%)",
+        "Proporções — População x Amostra (IC 95%)"
     )
 
-    grafico_comparativo(
+    grafico_barras_comparativo(
         ["M1", "M2"],
-        "Médias — População x Amostra (IC 95%)",
+        "Médias — População x Amostra (IC 95%)"
     )
 
-    with st.expander(
-        "Fórmulas gerais dos intervalos"
-    ):
-        st.markdown(
-            "**Proporção — Wald com FPC**"
-        )
+    st.info(
+        "As proporções amostrais ficaram abaixo "
+        "dos valores populacionais, enquanto as "
+        "médias amostrais ficaram acima. "
+        "Os quatro parâmetros populacionais "
+        "ficaram dentro dos respectivos ICs."
+    )
+
+    with st.expander("Fórmulas dos intervalos"):
+        st.markdown("**Proporção — Wald**")
 
         st.latex(
             r"IC_{95\%}(\hat p)=\hat p\pm"
-            r"z_{0,975}"
-            r"\sqrt{\frac{\hat p(1-\hat p)}{n}}"
+            r"z_{0,975}\sqrt{\frac{\hat p(1-\hat p)}{n}}"
             r"\sqrt{\frac{N-n}{N-1}}"
         )
 
-        st.markdown(
-            "**Média — t de Student com FPC**"
-        )
+        st.markdown("**Média — t de Student**")
 
         st.latex(
             r"IC_{95\%}(\bar x)=\bar x\pm"
-            r"t_{0,975;n-1}"
-            r"\frac{s}{\sqrt n}"
+            r"t_{0,975;n-1}\frac{s}{\sqrt n}"
             r"\sqrt{\frac{N-n}{N-1}}"
+        )
+
+        st.caption(
+            "Proporções: intervalo de Wald. "
+            "Médias: t de Student com 382 graus "
+            "de liberdade. Correção para população "
+            "finita aplicada nos dois casos."
         )
 
 
 # ============================================================
-# 21. TESTES DE HIPOTESES
+# 18. TESTES DE HIPOTESES
 # ============================================================
 
 elif secao == "Testes de hipóteses":
-    st.header(
-        "Testes de hipóteses estatísticas"
-    )
+    st.header("Testes de hipóteses estatísticas")
 
     st.markdown(
         """
-        Foram realizados **dois testes Z para proporções**
-        e **dois testes t para médias**.
-
-        Todos são bilaterais, com significância de 5%.
-
-        **Regra:** rejeitamos H0 quando o valor-p
-        é inferior a 0,05.
+        Foram realizados dois testes Z para
+        proporções e dois testes t para médias,
+        todos bilaterais, com **α = 0,05**.
         """
     )
 
     st.dataframe(
         tabela_testes(),
-        hide_index=True,
         width="stretch",
+        hide_index=True
     )
 
-    st.subheader(
-        "Hipóteses, estatísticas e interpretações"
-    )
+    st.subheader("Hipóteses e interpretações")
 
     for codigo in CODIGOS:
+        r = resultados[codigo]
+        h = HIPOTESES[codigo]
+
         with st.expander(
-            f"{codigo} — {resultados[codigo]['nome']}",
-            expanded=(codigo == "P1"),
+            f"{codigo} — {r['nome']}",
+            expanded=(codigo == "P1")
         ):
-            explicacao_teste(codigo)
+            st.write(
+                "**Questão:**",
+                h["pergunta"]
+            )
+
+            st.write(
+                "**Variável/evento:**",
+                h["evento"]
+            )
+
+            if r["tipo"] == "Proporção":
+                st.latex(
+                    rf"H_0:p={h['referencia']:.2f}"
+                )
+
+                st.latex(
+                    rf"H_1:p\neq{h['referencia']:.2f}"
+                )
+            else:
+                st.latex(
+                    rf"H_0:\mu={h['referencia']:.0f}"
+                )
+
+                st.latex(
+                    rf"H_1:\mu\neq{h['referencia']:.0f}"
+                )
+
+            x1, x2, x3 = st.columns(3)
+
+            x1.metric(
+                "Estimativa",
+                formatar_valor(
+                    r["estimativa"],
+                    r["tipo"]
+                )
+            )
+
+            x2.metric(
+                "Estatística",
+                br(
+                    r["estatistica"],
+                    4
+                )
+            )
+
+            x3.metric(
+                "Valor-p",
+                formato_p(r["p"])
+            )
+
+            if r["p"] < ALFA:
+                st.success(
+                    "Rejeitar H0: evidência estatística "
+                    "de diferença em relação à referência."
+                )
+            else:
+                st.info(
+                    "Não rejeitar H0: evidência insuficiente "
+                    "para afirmar diferença da referência."
+                )
+
+            st.caption(
+                "A não rejeição não comprova "
+                "a igualdade proposta em H0."
+            )
 
     st.subheader(
         "Condições dos testes de proporção"
     )
 
-    condicoes = []
+    linhas = []
 
     for codigo in ["P1", "P2"]:
         p0 = HIPOTESES[codigo]["referencia"]
 
-        sucessos = n * p0
-        insucessos = n * (1 - p0)
+        s = n * p0
+        f = n * (1 - p0)
 
-        condicoes.append({
+        linhas.append({
             "Teste": codigo,
-            "Sucessos esperados sob H0": br(
-                sucessos, 1
-            ),
-            "Insucessos esperados sob H0": br(
-                insucessos, 1
-            ),
+            "Sucessos esperados sob H0": br(s, 1),
+            "Insucessos esperados sob H0": br(f, 1),
             "Critério ≥ 10": (
                 "Atendido"
-                if min(sucessos, insucessos) >= 10
+                if min(s, f) >= 10
                 else "Não atendido"
-            ),
+            )
         })
 
     st.dataframe(
-        pd.DataFrame(condicoes),
+        pd.DataFrame(linhas),
         hide_index=True,
-        width="stretch",
+        width="stretch"
     )
 
     st.warning(
-        "As distribuições de pessoas e feridos "
-        "apresentam assimetria e valores extremos. "
-        "Os testes t exigem interpretação cuidadosa."
+        "As distribuições das variáveis pessoas e "
+        "feridos apresentam assimetria e valores "
+        "extremos. Os resultados dos testes t "
+        "devem considerar essas limitações."
     )
 
     st.divider()
 
     st.subheader(
-        "Curvas normais — P1 e P2"
+        "Curvas normais — Testes P1 e P2"
     )
 
     st.caption(
-        "As curvas representam a distribuição "
-        "teórica da estatística Z sob H0, "
-        "não a distribuição dos acidentes."
+        "Visualização complementar da Etapa 13.2. "
+        "A curva representa a distribuição teórica "
+        "da estatística Z sob H0, e não a distribuição "
+        "dos acidentes individuais."
     )
 
-    grafico_curva_teste("P1")
-    grafico_curva_teste("P2")
+    for codigo in ["P1", "P2"]:
+        grafico_curva_teste(codigo)
+        interpretacao_curva(codigo)
 
     st.divider()
 
     st.subheader(
-        "Curvas t de Student — M1 e M2"
+        "Curvas t de Student — Testes M1 e M2"
     )
 
     st.caption(
-        f"Distribuição t de Student com "
-        f"{GL} graus de liberdade."
+        "Visualização complementar da Etapa 13.3. "
+        f"Distribuição t de Student com {GL} graus "
+        "de liberdade, sob as respectivas hipóteses nulas."
     )
 
-    grafico_curva_teste("M1")
-    grafico_curva_teste("M2")
+    for codigo in ["M1", "M2"]:
+        grafico_curva_teste(codigo)
+        interpretacao_curva(codigo)
 
     st.info(
-        "As linhas vermelhas indicam os valores "
-        "críticos individuais. A linha verde "
-        "representa a estatística observada. "
-        "As áreas laranja correspondem ao valor-p "
-        "bilateral e podem se sobrepor às áreas críticas."
+        "As regiões vermelhas indicam rejeição "
+        "individual ao nível de 5%. As áreas "
+        "laranja representam os valores-p bilaterais. "
+        "As áreas podem se sobrepor."
     )
 
     st.warning(
-        "P1 e M2 rejeitaram H0 individualmente, "
-        "mas nenhuma hipótese permaneceu rejeitada "
-        "após o ajuste de Holm."
+        "P1 e M2 rejeitam H0 nos testes individuais, "
+        "mas nenhuma das quatro hipóteses permanece "
+        "rejeitada após o ajuste de Holm."
     )
 
 
 # ============================================================
-# 22. SENSIBILIDADE
+# 19. ANALISE DE SENSIBILIDADE
 # ============================================================
 
 elif secao == "Sensibilidade":
-    st.header(
-        "Análise de sensibilidade"
-    )
+    st.header("Análise de sensibilidade")
 
     st.markdown(
         """
-        Esta seção investiga a influência das
-        ocorrências extremas nas médias M1 e M2.
+        Investigação complementar da influência
+        da ocorrência extrema nas médias M1 e M2.
 
-        A exclusão é **hipotética** e utilizada
-        apenas para diagnóstico.
+        A exclusão foi **hipotética**, realizada
+        exclusivamente para diagnóstico.
 
-        A amostra original permanece preservada.
+        A amostra original permaneceu preservada.
         """
     )
+
+    extremo_m1 = sensibilidade["M1"]
+    extremo_m2 = sensibilidade["M2"]
+    st.info(
+        f"**Ocorrência extrema ID {extremo_m1['id_extremo']}:** "
+        f"{br(extremo_m1['maximo'], 0)} pessoas envolvidas e "
+        f"{br(extremo_m2['maximo'], 0)} pessoas feridas. "
+        "A remoção é apenas uma simulação: o conjunto oficial mantém os 383 registros."
+    )
+    col1, col2 = st.columns(2)
+    for codigo, col in [("M1", col1), ("M2", col2)]:
+        sv = sensibilidade[codigo]
+        queda = 100 * (
+            sv["media_original"] - sv["media_sem_maximo"]
+        ) / sv["media_original"]
+        with col:
+            st.metric(
+                f"Redução da média {codigo} sem a ocorrência extrema",
+                f"{br(queda, 2)}%",
+                delta=f"−{br(sv['media_original'] - sv['media_sem_maximo'], 4)} pessoa(s)/acidente",
+                delta_color="off",
+            )
 
     linhas = []
 
@@ -2035,16 +2055,22 @@ elif secao == "Sensibilidade":
 
         linhas.append({
             "Teste": codigo,
-            "ID extremo": str(s["id_extremo"]),
-            "Máximo": br(s["maximo"], 0),
+            "ID extremo": s["id_extremo"],
+            "Máximo": br(
+                s["maximo"],
+                0
+            ),
             "Média original": br(
-                s["media_original"], 6
+                s["media_original"],
+                6
             ),
             "Média sem máximo": br(
-                s["media_sem_maximo"], 6
+                s["media_sem_maximo"],
+                6
             ),
             "Média aparada 5%": br(
-                s["media_aparada"], 6
+                s["media_aparada"],
+                6
             ),
             "p original": formato_p(
                 s["p_original"]
@@ -2053,27 +2079,27 @@ elif secao == "Sensibilidade":
                 s["p_sem_maximo"]
             ),
             "Decisão original": s["decisao_original"],
-            "Decisão sem máximo": s["decisao_sem_maximo"],
+            "Decisão sem máximo": s["decisao_sem_maximo"]
         })
 
     st.dataframe(
         pd.DataFrame(linhas),
         hide_index=True,
-        width="stretch",
+        width="stretch"
     )
 
     fig = go.Figure()
 
     for codigo, cor in [
         ("M1", AZUL),
-        ("M2", LARANJA),
+        ("M2", LARANJA)
     ]:
         s = sensibilidade[codigo]
 
         valores = [
             s["media_original"],
             s["media_sem_maximo"],
-            s["media_aparada"],
+            s["media_aparada"]
         ]
 
         fig.add_trace(
@@ -2082,7 +2108,7 @@ elif secao == "Sensibilidade":
                 x=[
                     "Média original",
                     "Média sem máximo",
-                    "Média aparada 5%",
+                    "Média aparada 5%"
                 ],
                 y=valores,
                 marker_color=cor,
@@ -2091,6 +2117,10 @@ elif secao == "Sensibilidade":
                     for valor in valores
                 ],
                 textposition="outside",
+                hovertemplate=(
+                    "%{x}<br>Média: %{y:.4f}"
+                    "<extra></extra>"
+                )
             )
         )
 
@@ -2100,68 +2130,145 @@ elif secao == "Sensibilidade":
         barmode="group",
         height=440,
         yaxis_title="Pessoas por acidente",
+        font=dict(size=13),
+        margin=dict(
+            l=30,
+            r=30,
+            t=65,
+            b=55
+        )
     )
 
-    plotar(fig)
+    exibir_plotly(fig)
 
-    st.subheader(
-        "Interpretação"
+    st.caption(
+        "**Média aparada de 5%:** para este cálculo descritivo, "
+        "são retirados aproximadamente 5% dos menores e 5% dos "
+        "maiores valores, somente para examinar a influência dos extremos. "
+        "A média e os testes oficiais continuam usando os 383 acidentes."
     )
+
+    st.subheader("Interpretação")
 
     st.markdown(
         """
         **M1 — Pessoas envolvidas**
 
-        A média diminui de aproximadamente
+        A média diminuiu de aproximadamente
         2,744 para 2,552 após a exclusão
         hipotética da ocorrência máxima.
 
-        A decisão individual muda de
-        não rejeitar para rejeitar H0.
+        A decisão do teste mudou de não rejeitar
+        para rejeitar H0.
 
         **M2 — Pessoas feridas**
 
-        A média diminui de aproximadamente
-        1,269 para 1,173.
+        A média diminuiu de aproximadamente
+        1,269 para 1,173 após a mesma exclusão.
 
-        O teste continua rejeitando H0,
-        mas seu valor-p muda.
+        O teste continuou rejeitando H0,
+        mas apresentou alteração no valor-p.
         """
     )
 
     st.warning(
-        "Esses resultados são diagnósticos "
-        "de sensibilidade e não substituem "
-        "os testes da amostra original."
+        "Os valores-p após a exclusão são apenas "
+        "diagnósticos de sensibilidade. Não constituem "
+        "testes confirmatórios com o mesmo desenho "
+        "amostral original."
     )
 
 
 # ============================================================
-# 23. HOLM
+# 20. AJUSTE DE HOLM
 # ============================================================
 
 elif secao == "Ajuste de Holm":
-    st.header(
-        "Comparações múltiplas — Holm"
-    )
+    st.header("Comparações múltiplas — Holm")
 
     st.markdown(
         """
-        O ajuste de Holm controla o risco familiar
-        de rejeições incorretas quando analisamos
-        simultaneamente os quatro testes.
-
-        **Antes do ajuste:** P1 e M2 rejeitavam H0.
-
-        **Após o ajuste:** nenhuma hipótese
-        permanece rejeitada ao nível de 5%.
+        Os quatro valores-p originais foram
+        submetidos ao procedimento sequencial
+        de Holm, adotando significância familiar
+        de 5%.
         """
     )
 
     st.dataframe(
         tabela_holm(),
         hide_index=True,
-        width="stretch",
+        width="stretch"
+    )
+
+    st.markdown(
+        "**Como interpretar:** no teste individual, compare o valor-p original com 0,05. "
+        "Na análise conjunta, compare o valor-p ajustado de Holm com 0,05. "
+        "Os valores P1 e M2 passam de inferiores a 0,05 para aproximadamente 0,052755."
+    )
+
+    st.subheader("Por que nenhuma hipótese foi rejeitada após Holm?")
+    ordem_holm = sorted(CODIGOS, key=lambda c: resultados[c]["p"])
+    menor = ordem_holm[0]
+    limite_inicial = ALFA / len(CODIGOS)
+    st.warning(
+        f"O menor valor-p é **{menor} = {formato_p(resultados[menor]['p'])}**. "
+        f"O primeiro limite de Holm é **0,05 / 4 = {br(limite_inicial, 6)}**. "
+        f"Como {formato_p(resultados[menor]['p'])} > "
+        f"{br(limite_inicial, 6)}, o procedimento para e "
+        "nenhuma hipótese é rejeitada nesta família de quatro testes."
+    )
+    linhas_holm = []
+    parou = False
+    for indice, codigo_h in enumerate(ordem_holm):
+        p_atual = resultados[codigo_h]["p"]
+        limite_atual = ALFA / (len(CODIGOS) - indice)
+        if parou:
+            etapa = "Não testado após parada (sem rejeição)"
+        elif p_atual <= limite_atual:
+            etapa = "Rejeitar H0 e prosseguir"
+        else:
+            etapa = "Não rejeitar H0; interromper"
+            parou = True
+        linhas_holm.append({
+            "Etapa": indice + 1,
+            "Teste": codigo_h,
+            "Valor-p original": formato_p(p_atual),
+            "Limite sequencial": br(limite_atual, 6),
+            "Procedimento": etapa,
+        })
+    st.dataframe(pd.DataFrame(linhas_holm), hide_index=True, width="stretch")
+
+    # Escala ampliada: somente as hipoteses que seriam rejeitadas individualmente.
+    st.subheader("Detalhe dos testes P1 e M2 — próximo ao limiar de 5%")
+    focos = ["P1", "M2"]
+    fig_detalhe = go.Figure()
+    for nome, campo, cor in [
+        ("Original", "p", AZUL),
+        ("Ajustado Holm", "p_holm", LARANJA),
+    ]:
+        fig_detalhe.add_trace(go.Bar(
+            name=nome,
+            x=focos,
+            y=[resultados[c][campo] for c in focos],
+            marker_color=cor,
+            text=[formato_p(resultados[c][campo]) for c in focos],
+            textposition="outside",
+            cliponaxis=False,
+        ))
+    fig_detalhe.add_hline(y=ALFA, line_dash="dash", line_color=VERMELHO,
+                           annotation_text="α familiar = 0,05")
+    fig_detalhe.update_layout(
+        template="plotly_white", height=380, barmode="group",
+        yaxis=dict(title="Valor-p", range=[0, 0.065]),
+        xaxis_title="Hipótese", margin=dict(l=30, r=40, t=35, b=50),
+        legend=dict(orientation="h", y=-0.25),
+    )
+    exibir_plotly(fig_detalhe)
+    st.caption(
+        "P1 e M2 tinham valores-p originais inferiores a 0,05, "
+        "mas ambos apresentam valor-p ajustado de aproximadamente 0,052755. "
+        "Esse aumento é resultado do controle de múltiplas comparações."
     )
 
     fig = go.Figure()
@@ -2171,15 +2278,10 @@ elif secao == "Ajuste de Holm":
             name="Valor-p original",
             x=CODIGOS,
             y=[
-                resultados[c]["p"]
-                for c in CODIGOS
+                resultados[codigo]["p"]
+                for codigo in CODIGOS
             ],
-            marker_color=AZUL,
-            text=[
-                formato_p(resultados[c]["p"])
-                for c in CODIGOS
-            ],
-            textposition="outside",
+            marker_color=AZUL
         )
     )
 
@@ -2188,15 +2290,10 @@ elif secao == "Ajuste de Holm":
             name="Valor-p ajustado Holm",
             x=CODIGOS,
             y=[
-                resultados[c]["p_holm"]
-                for c in CODIGOS
+                resultados[codigo]["p_holm"]
+                for codigo in CODIGOS
             ],
-            marker_color=LARANJA,
-            text=[
-                formato_p(resultados[c]["p_holm"])
-                for c in CODIGOS
-            ],
-            textposition="outside",
+            marker_color=LARANJA
         )
     )
 
@@ -2204,100 +2301,54 @@ elif secao == "Ajuste de Holm":
         y=ALFA,
         line_dash="dash",
         line_color=VERMELHO,
-        annotation_text="α = 0,05",
+        annotation_text="α = 0,05"
     )
 
     fig.update_layout(
         title="Valores-p antes e depois do ajuste",
         template="plotly_white",
         barmode="group",
-        height=470,
+        height=440,
         xaxis_title="Teste",
         yaxis_title="Valor-p",
+        font=dict(size=13),
         margin=dict(
-            l=30,
-            r=30,
+            l=25,
+            r=25,
             t=65,
-            b=45,
-        ),
-    )
-
-    plotar(fig)
-
-    st.subheader(
-        "Como funciona o procedimento de Holm?"
-    )
-
-    ordenados = sorted(
-        CODIGOS,
-        key=lambda c: resultados[c]["p"],
-    )
-
-    etapas = []
-
-    total = len(ordenados)
-
-    interrompido = False
-
-    for posicao, codigo in enumerate(ordenados):
-        limite = ALFA / (total - posicao)
-
-        p_original = resultados[codigo]["p"]
-
-        rejeitar = (
-            not interrompido
-            and p_original <= limite
+            b=45
         )
-
-        if not rejeitar:
-            interrompido = True
-
-        etapas.append({
-            "Ordem": posicao + 1,
-            "Teste": codigo,
-            "Valor-p": formato_p(p_original),
-            "Limite Holm": br(limite, 6),
-            "Decisão sequencial": (
-                "Rejeitar H0"
-                if rejeitar
-                else "Não rejeitar H0"
-            ),
-        })
-
-    st.dataframe(
-        pd.DataFrame(etapas),
-        hide_index=True,
-        width="stretch",
     )
+
+    exibir_plotly(fig)
 
     st.info(
-        "Os valores-p ajustados de P1 e M2 "
-        "ficam próximos de 0,052755, "
-        "ligeiramente acima de 0,05. "
-        "Por isso, nenhuma hipótese permanece "
-        "rejeitada após o ajuste."
+        "P1 e M2 rejeitaram H0 nos testes individuais. "
+        "Após o ajuste de Holm, nenhuma hipótese "
+        "permaneceu rejeitada ao nível familiar de 5%."
     )
 
-    st.caption(
-        "O ajuste de Holm não invalida os "
-        "testes individuais. Ele fornece uma "
-        "interpretação complementar quando "
-        "os quatro testes são considerados juntos."
+    st.markdown(
+        """
+        **Interpretação**
+
+        O ajuste de Holm não invalida os testes
+        individuais. Ele fornece uma avaliação
+        complementar das evidências quando
+        são consideradas conjuntamente as
+        quatro comparações realizadas.
+        """
     )
 
 
 # ============================================================
-# 24. METODOLOGIA E AUDITORIA
+# 21. METODOLOGIA E AUDITORIA
 # ============================================================
 
 elif secao == "Metodologia":
-    st.header(
-        "Metodologia e auditoria"
-    )
+    st.header("Metodologia e auditoria")
 
-    st.subheader(
-        "Desenho amostral"
-    )
+    st.subheader("Desenho amostral")
 
     st.markdown(
         """
@@ -2305,7 +2356,7 @@ elif secao == "Metodologia":
         - **Amostra:** 383 ocorrências.
         - **Método:** AAS sem reposição.
         - **Semente original:** `random_state=42`.
-        - **Confiança:** 95%.
+        - **Nível de confiança:** 95%.
         - **Significância:** 5%.
         - **Testes:** bilaterais.
         """
@@ -2321,41 +2372,13 @@ elif secao == "Metodologia":
 
     st.metric(
         "Fator utilizado",
-        br(FPC, 6),
+        br(FPC, 6)
     )
 
-    st.subheader(
-        "Fórmulas dos intervalos"
-    )
+    st.subheader("Estatísticas dos testes")
 
     st.markdown(
-        "**Proporção — Wald**"
-    )
-
-    st.latex(
-        r"IC_{95\%}=\hat p\pm"
-        r"z_{0,975}"
-        r"\sqrt{\frac{\hat p(1-\hat p)}{n}}"
-        r"\cdot FPC"
-    )
-
-    st.markdown(
-        "**Média — t de Student**"
-    )
-
-    st.latex(
-        r"IC_{95\%}=\bar x\pm"
-        r"t_{0,975;n-1}"
-        r"\frac{s}{\sqrt n}"
-        r"\cdot FPC"
-    )
-
-    st.subheader(
-        "Estatísticas dos testes"
-    )
-
-    st.markdown(
-        "**Teste Z para proporção**"
+        "**Teste Z para proporções**"
     )
 
     st.latex(
@@ -2364,88 +2387,12 @@ elif secao == "Metodologia":
     )
 
     st.markdown(
-        "**Teste t para média**"
+        "**Teste t para médias**"
     )
 
     st.latex(
         r"t=\frac{\bar x-\mu_0}"
-        r"{\frac{s}{\sqrt n}\cdot FPC}"
-    )
-
-    st.subheader(
-        "Auditoria computacional"
-    )
-
-    auditoria = pd.DataFrame([
-        {
-            "Verificação": "Registros populacionais",
-            "Resultado": str(N),
-            "Situação": "Aprovado",
-        },
-        {
-            "Verificação": "Registros amostrais",
-            "Resultado": str(n),
-            "Situação": "Aprovado",
-        },
-        {
-            "Verificação": "IDs únicos e pertencentes à população",
-            "Resultado": "Sim",
-            "Situação": "Aprovado",
-        },
-        {
-            "Verificação": "Valores amostrais conferidos",
-            "Resultado": (
-                "Sim" if valores_conferidos else "Não"
-            ),
-            "Situação": "Aprovado",
-        },
-        {
-            "Verificação": "Contagens da amostra",
-            "Resultado": (
-                "Conferidas" if contagens_validas
-                else "Divergentes"
-            ),
-            "Situação": "Aprovado",
-        },
-        {
-            "Verificação": "Parâmetros analisados",
-            "Resultado": "4",
-            "Situação": "Aprovado",
-        },
-        {
-            "Verificação": "ICs contendo parâmetro",
-            "Resultado": str(total_cobertura),
-            "Situação": "Aprovado",
-        },
-        {
-            "Verificação": "Resultados inferenciais",
-            "Resultado": (
-                "Conferidos" if resultados_conferidos
-                else "Divergentes"
-            ),
-            "Situação": "Aprovado",
-        },
-        {
-            "Verificação": "Rejeições individuais",
-            "Resultado": str(rejeicoes),
-            "Situação": "Conferido",
-        },
-        {
-            "Verificação": "Rejeições após Holm",
-            "Resultado": str(rejeicoes_holm),
-            "Situação": "Conferido",
-        },
-        {
-            "Verificação": "Amostra original",
-            "Resultado": "Preservada",
-            "Situação": "Aprovado",
-        },
-    ])
-
-    st.dataframe(
-        auditoria,
-        hide_index=True,
-        width="stretch",
+        r"{\frac{s}{\sqrt{n}}\cdot FPC}"
     )
 
     st.subheader(
@@ -2454,41 +2401,134 @@ elif secao == "Metodologia":
 
     st.markdown(
         """
-        **Curvas normais:** distribuições teóricas
-        dos testes Z para P1 e P2.
+        **Etapa 13.2 — Curvas normais**
 
-        **Curvas t:** distribuições teóricas
-        dos testes M1 e M2, com 382 graus
-        de liberdade.
+        As curvas Z representam distribuições
+        teóricas das estatísticas de teste sob
+        H0, com valores críticos e áreas
+        correspondentes aos valores-p bilaterais.
 
-        **Gráficos comparativos:** parâmetros
-        populacionais, estimativas amostrais
-        e seus ICs de 95%.
+        **Etapa 13.3 — Curvas t de Student**
 
-        **Sensibilidade:** avaliação hipotética
-        da influência de ocorrências extremas.
+        Foram utilizadas curvas com 382 graus
+        de liberdade para os testes M1 e M2.
 
-        **Holm:** controle complementar do erro
-        familiar nas quatro comparações.
+        **Etapa 13.4 — Comparações com ICs**
+
+        Os gráficos de barras apresentam os
+        parâmetros populacionais e as estimativas
+        amostrais acompanhadas de seus ICs de 95%.
+
+        As barras de erro não representam
+        incerteza de cálculo dos parâmetros
+        da população operacional.
+
+        **Interpretação dos testes**
+
+        Os valores críticos e as áreas de rejeição
+        correspondem aos testes individuais.
+
+        O ajuste de Holm fornece uma análise
+        adicional para as quatro hipóteses
+        consideradas conjuntamente.
         """
     )
 
-    st.subheader(
-        "Limitações metodológicas"
+    st.subheader("Auditoria computacional")
+
+    # Todos os resultados sao apresentados como texto
+    # para evitar tipos mistos no PyArrow.
+    auditoria = pd.DataFrame([
+        {
+            "Verificação": "Registros populacionais",
+            "Resultado": str(N),
+            "Situação": "Aprovado"
+        },
+        {
+            "Verificação": "Registros amostrais",
+            "Resultado": str(n),
+            "Situação": "Aprovado"
+        },
+        {
+            "Verificação": "IDs únicos e pertencentes à população",
+            "Resultado": "Sim",
+            "Situação": "Aprovado"
+        },
+        {
+            "Verificação": "Valores amostrais conferidos",
+            "Resultado": (
+                "Sim" if contagens_validas else "Não"
+            ),
+            "Situação": (
+                "Aprovado"
+                if contagens_validas
+                else "Revisar"
+            )
+        },
+        {
+            "Verificação": "Parâmetros analisados",
+            "Resultado": str(len(CODIGOS)),
+            "Situação": "Aprovado"
+        },
+        {
+            "Verificação": "ICs contendo parâmetro",
+            "Resultado": str(total_cobertura),
+            "Situação": (
+                "Aprovado"
+                if total_cobertura == 4
+                else "Revisar"
+            )
+        },
+        {
+            "Verificação": "Resultados inferenciais",
+            "Resultado": (
+                "Conferidos"
+                if resultados_conferidos
+                else "Divergentes"
+            ),
+            "Situação": (
+                "Aprovado"
+                if resultados_conferidos
+                else "Revisar"
+            )
+        },
+        {
+            "Verificação": "Rejeições individuais",
+            "Resultado": str(rejeicoes),
+            "Situação": "Conferido"
+        },
+        {
+            "Verificação": "Rejeições após Holm",
+            "Resultado": str(rejeicoes_holm),
+            "Situação": "Conferido"
+        },
+        {
+            "Verificação": "Amostra original",
+            "Resultado": "Preservada",
+            "Situação": "Aprovado"
+        }
+    ])
+
+    st.dataframe(
+        auditoria,
+        hide_index=True,
+        width="stretch"
     )
+
+    st.subheader("Limitações metodológicas")
 
     st.markdown(
         """
-        A população operacional corresponde
-        aos registros disponíveis na base
-        utilizada e não é automaticamente
-        generalizável a acidentes não registrados.
+        A população operacional corresponde aos
+        registros disponíveis na base utilizada,
+        não sendo automaticamente generalizável
+        a acidentes não registrados.
 
-        Os intervalos para proporções utilizam
+        Os intervalos para proporções utilizaram
         a aproximação normal de Wald.
 
         Os intervalos e testes para médias
-        utilizam a distribuição t de Student.
+        utilizaram a distribuição t de Student.
 
         A assimetria e os valores extremos
         podem afetar a adequação dessas
@@ -2498,16 +2538,17 @@ elif secao == "Metodologia":
         de teste não implica que as variáveis
         originais sejam normalmente distribuídas.
 
-        A exclusão hipotética de ocorrências
-        extremas não representa novo sorteio
-        e não substitui os testes originais.
+        A análise de sensibilidade com exclusão
+        hipotética não representa novo sorteio
+        aleatório nem substitui os testes originais.
 
         As quatro hipóteses foram formuladas
         para fins acadêmicos exploratórios,
         não representando metas oficiais da PRF.
 
-        A cobertura observada dos quatro ICs
-        não garante cobertura em novas amostragens.
+        A cobertura dos quatro parâmetros
+        populacionais nesta amostra não
+        garante cobertura em novas amostragens.
 
         Os testes individuais e o ajuste de Holm
         devem ser interpretados separadamente.
@@ -2516,7 +2557,7 @@ elif secao == "Metodologia":
 
 
 # ============================================================
-# 25. RODAPE
+# 22. RODAPE COMUM
 # ============================================================
 
 st.divider()
