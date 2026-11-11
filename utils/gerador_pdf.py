@@ -433,6 +433,21 @@ def gerar_pdf(raiz: str|Path,incluir_graficos:bool=True,incluir_metodologia:bool
                 [nome,br(n,0),br(pct,2)+'%'] for nome,n,pct in linhas],
                 [11.2*cm,3.1*cm,3.5*cm])
             imagem(plot_categorica(linhas,c))
+            if c == 'classificacao_acidente' and tipo == 'população':
+                # Uma ocorrência fatal não tem classificação, mas possui mortos = 1.
+                # A nota documenta a divergência entre variáveis sem alterar indicadores.
+                nao_classificado = d['classificacao_acidente'].isna() | d['classificacao_acidente'].astype('string').str.strip().eq('').fillna(False)
+                divergentes = d.loc[d['mortos'].gt(0) & nao_classificado, ['id','mortos']]
+                if len(divergentes) == 1:
+                    id_divergente = int(divergentes.iloc[0]['id'])
+                    p('Nota metodológica — O indicador de acidentes com pelo menos uma morte utiliza '
+                      'mortos &gt; 0, totalizando 5.210 ocorrências. A categoria qualitativa '
+                      '“Com Vítimas Fatais” registra 5.209, pois o acidente ID '
+                      + str(id_divergente) + ' apresenta uma morte, mas está sem classificação. '
+                      'Esse registro permanece incluído no indicador P1; não há exclusão da população nem da amostra.', 'Pequeno')
+                else:
+                    p('Nota metodológica — O indicador de acidentes com mortes é calculado por '
+                      'mortos &gt; 0, independentemente da categoria classificacao_acidente.', 'Pequeno')
             if c in TOP10:p('Dez categorias definidas pela frequência na população; percentuais calculados sobre todos os registros.','Pequeno')
         h2('Consulta dos registros e escopo')
         p('O PDF utiliza o conjunto completo sem filtros. Prévia de dez registros; consulta interativa disponível no Streamlit.','Pequeno')
