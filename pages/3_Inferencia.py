@@ -2,7 +2,7 @@
 # ============================================================
 # PRF ANALYTICS 2025
 # DASHBOARD 3 - INFERENCIA ESTATISTICA E COMPARACAO
-# VERSAO 1.3 - INTERVALOS EXPLICATIVOS E MEMORIA DE CALCULO
+# VERSAO 1.5 - CORRECOES FINAIS DE APRESENTACAO
 #
 # Populacao operacional: 72.529 acidentes
 # Amostra AAS sem reposicao: 383 acidentes
@@ -1075,7 +1075,9 @@ def grafico_barras_comparativo(codigos, titulo):
             name="Amostra (IC 95%)",
             marker_color=LARANJA,
             text=textos_amostra,
-            textposition="outside",
+            textposition="inside",
+            insidetextanchor="middle",
+            textfont=dict(color="white", size=13),
             cliponaxis=False,
             error_y=dict(
                 type="data",
@@ -1806,7 +1808,7 @@ elif secao == "Intervalos de confiança":
         st.markdown("**Proporção — Wald**")
 
         st.latex(
-            r"IC_{95\%}(\hat p)=\hat p\pm"
+            r"IC_{95\%}(\hat p)=\hat p\pm "
             r"z_{0,975}\sqrt{\frac{\hat p(1-\hat p)}{n}}"
             r"\sqrt{\frac{N-n}{N-1}}"
         )
@@ -1814,7 +1816,7 @@ elif secao == "Intervalos de confiança":
         st.markdown("**Média — t de Student**")
 
         st.latex(
-            r"IC_{95\%}(\bar x)=\bar x\pm"
+            r"IC_{95\%}(\bar x)=\bar x\pm "
             r"t_{0,975;n-1}\frac{s}{\sqrt n}"
             r"\sqrt{\frac{N-n}{N-1}}"
         )
@@ -2044,8 +2046,11 @@ elif secao == "Sensibilidade":
             st.metric(
                 f"Redução da média {codigo} sem a ocorrência extrema",
                 f"{br(queda, 2)}%",
-                delta=f"−{br(sv['media_original'] - sv['media_sem_maximo'], 4)} pessoa(s)/acidente",
-                delta_color="off",
+            )
+            st.caption(
+                "Variação absoluta: −"
+                f"{br(sv['media_original'] - sv['media_sem_maximo'], 4)} "
+                "pessoa(s) por acidente (redução)."
             )
 
     linhas = []
