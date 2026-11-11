@@ -111,7 +111,10 @@ def inferencia(pop,amo):
             li=a-crit*se;ls=a+crit*se
             t=(a-h0)/se;pv=float(2*stats.t.sf(abs(t),n-1))
         r[c]=dict(codigo=c,nome=nome,tipo=tipo,h0=h0,pop=p,amo=a,li=li,ls=ls,
-                  estat=float(t),pv=pv,cobre=li<=p<=ls)
+                   estat=float(t),pv=pv,cobre=li<=p<=ls,
+                   ep_ic=float(se),crit=float(crit),margem=float(crit*se),
+                   desvio=float(v.std(ddof=1)) if tipo=='Média' else None,
+                   sucessos=int(v.sum()) if tipo=='Proporção' else None)
     p=np.array([r[c]['pv'] for c in HIP]);ordem=np.argsort(p);ajust=np.zeros(4);prev=0.
     for i,j in enumerate(ordem):
         prev=max(prev,min(1.,(4-i)*p[j]));ajust[j]=prev
@@ -205,11 +208,66 @@ def plot_comparacao(r,lista):
     mul=100 if lista[0].startswith('P') else 1
     erro=np.array([[r[c]['amo']-r[c]['li'] for c in lista],
                    [r[c]['ls']-r[c]['amo'] for c in lista]])*mul
-    ax.bar(x-w/2,pop*mul,w,color=AZUL,label='População')
-    ax.bar(x+w/2,amo*mul,w,color=LARANJA,yerr=erro,capsize=5,label='Amostra (IC 95%)')
+    barras_pop=ax.bar(x-w/2,pop*mul,w,color=AZUL,label='População')
+    barras_amo=ax.bar(x+w/2,amo*mul,w,color=LARANJA,yerr=erro,capsize=5,
+                      label='Amostra (IC 95%)',error_kw={'ecolor':'#7c2d12','lw':1.5})
+    for barras,interno in ((barras_pop,False),(barras_amo,True)):
+        for barra in barras:
+            altura=barra.get_height()
+            ax.text(barra.get_x()+barra.get_width()/2,
+                    altura*.55 if interno else altura+max(erro.flatten())*.08,
+                    br(altura,2 if mul==100 else 3)+('%' if mul==100 else ''),
+                    ha='center',va='center' if interno else 'bottom',fontsize=7,
+                    color='white' if interno else '#245e88',fontweight='bold')
     ax.set_xticks(x,lista);ax.set_ylabel('%' if mul==100 else 'Pessoas/acidente')
     ax.legend(fontsize=8);ax.grid(axis='y',alpha=.16)
     ax.set_title('Comparação população × amostra',pad=12);fig.tight_layout(pad=1.4)
+    return figura(fig)
+
+
+def plot_ic_individual(c, r):
+    """IC ampliado, com limites, estimativa e parâmetro identificados."""
+    prop = r['tipo']=='Proporção'; fator=100 if prop else 1
+    li, ls, est, pop = [r[k]*fator for k in ('li','ls','amo','pop')]
+    faixa=max(ls-li, .05); folga=max(faixa*.13,.35 if prop else .035)
+    fig, ax=plt.subplots(figsize=(9,2.5))
+    ax.hlines(0,li,ls,color=AZUL,lw=4,zorder=2)
+    ax.plot([li,li],[ -.06,.06],color=AZUL,lw=2)
+    ax.plot([ls,ls],[ -.06,.06],color=AZUL,lw=2)
+    ax.scatter([est],[0],s=85,color=AZUL,edgecolor='white',zorder=4)
+    ax.scatter([pop],[0],s=95,marker='D',color=LARANJA,edgecolor='white',zorder=4)
+    fmt=lambda a:br(a,2)+('%' if prop else '')
+    ax.annotate('Amostra '+fmt(est),(est,0),xytext=(0,20),textcoords='offset points',
+                ha='center',color=AZUL,fontsize=8,fontweight='bold')
+    ax.annotate('População '+fmt(pop),(pop,0),xytext=(0,-26),textcoords='offset points',
+                ha='center',color=LARANJA,fontsize=8,fontweight='bold')
+    ax.annotate('LI '+fmt(li),(li,0),xytext=(0,-36),textcoords='offset points',
+                ha='center',color=AZUL,fontsize=7)
+    ax.annotate('LS '+fmt(ls),(ls,0),xytext=(0,-36),textcoords='offset points',
+                ha='center',color=AZUL,fontsize=7)
+    ax.set_xlim(max(0,li-folga),ls+folga);ax.set_ylim(-.50,.48)
+    ax.set_yticks([]);ax.set_xlabel('Proporção (%)' if prop else 'Pessoas por acidente',fontsize=8)
+    ax.grid(axis='x',alpha=.16)
+    for s in ('left','top','right'):ax.spines[s].set_visible(False)
+    ax.spines['bottom'].set_alpha(.25)
+    fig.tight_layout(pad=1.1)
+    return figura(fig)
+
+
+def plot_holm_ampliado(r):
+    """Detalhe dos dois valores-p que mudam após Holm."""
+    codigos=['P1','M2'];fig,ax=plt.subplots(figsize=(9,2.6))
+    x=np.arange(2);w=.32
+    barras_1=ax.bar(x-w/2,[r[c]['pv'] for c in codigos],w,color=AZUL,label='Original')
+    barras_2=ax.bar(x+w/2,[r[c]['holm'] for c in codigos],w,color=LARANJA,label='Holm')
+    for barras in (barras_1,barras_2):
+        for barra in barras:
+            ax.text(barra.get_x()+barra.get_width()/2,barra.get_height()+.0008,
+                    br(barra.get_height(),6),fontsize=7,ha='center')
+    ax.axhline(.05,color='firebrick',ls='--',lw=1,label='Limite 5%')
+    ax.set_ylim(0,.062);ax.set_xticks(x,codigos);ax.set_ylabel('Valor-p')
+    ax.legend(ncol=3,fontsize=7,loc='upper left');ax.grid(axis='y',alpha=.12)
+    fig.tight_layout(pad=1.2)
     return figura(fig)
 
 
@@ -219,8 +277,11 @@ def plot_teste(c,r):
     fig,ax=plt.subplots(figsize=(9,3.15));ax.plot(x,y,color=AZUL,lw=2)
     ax.fill_between(x,y,where=abs(x)>=abs(r['estat']),alpha=.34,color=LARANJA,
                     label='Valor-p bilateral')
-    for s in (-crit,crit):ax.axvline(s,color='firebrick',ls='--',lw=1.1)
-    ax.axvline(r['estat'],color='black',lw=1.3,label='Teste = '+br(r['estat'],3))
+    for s in (-crit,crit):
+        ax.axvline(s,color='firebrick',ls='--',lw=1.1)
+        ax.text(s,.34,('−' if s<0 else '+')+br(abs(s),3),
+                color='firebrick',fontsize=7,ha='center')
+    ax.axvline(r['estat'],color='#17846A',lw=1.5,label='Observado = '+br(r['estat'],3))
     ax.set_title(c+' — '+('t de Student (382 gl)' if t else 'Normal Z'),pad=12)
     ax.legend(loc='upper right',fontsize=7);ax.grid(alpha=.13);fig.tight_layout(pad=1.5)
     return figura(fig)
@@ -390,6 +451,32 @@ def gerar_pdf(raiz: str|Path,incluir_graficos:bool=True,incluir_metodologia:bool
          valor(x['li'],x['tipo'])+' a '+valor(x['ls'],x['tipo']),
          'Sim' if x['cobre'] else 'Não'] for c,x in r.items()],
         [1.4*cm,5.2*cm,2.5*cm,2.3*cm,4.8*cm,1.6*cm])
+    h2('Intervalos individuais — valores e memória de cálculo')
+    p('Os quatro gráficos usam escalas próprias; azul: estimativa e IC amostral; laranja: parâmetro conhecido na população. Os limites foram calculados sem utilizar H0.','Pequeno')
+    for c,x in r.items():
+        S.append(CondPageBreak(8.5*cm))
+        h2(c+' — '+x['nome'])
+        imagem(plot_ic_individual(c,x))
+        fator=100 if x['tipo']=='Proporção' else 1
+        unidade='pontos percentuais' if fator==100 else 'pessoas por acidente'
+        if fator==100:
+            operacao=('p estimada = '+str(x['sucessos'])+'/'+str(len(amo))+' = '+br(x['amo']*100,4)+'%; '
+                      'EP = raiz[p estimada × (1−p estimada)/n] × FPC = '+br(x['ep_ic'],8))
+            formula='IC 95% = p estimada ± z(0,975) × EP; z = '+br(x['crit'],6)
+        else:
+            operacao=('Média = '+br(x['amo'],6)+'; desvio amostral = '+br(x['desvio'],6)+
+                      '; EP = s/raiz(n) × FPC = '+br(x['ep_ic'],8))
+            formula='IC 95% = média ± t(0,975;382) × EP; t = '+br(x['crit'],6)
+        p(escape(operacao),'Pequeno');p(escape(formula),'Pequeno')
+        tabela(['Estimativa','Margem (±)','Limite inferior','Limite superior','População'],[
+            [valor(x['amo'],x['tipo']),br(x['margem']*fator,4),
+             valor(x['li'],x['tipo']),valor(x['ls'],x['tipo']),valor(x['pop'],x['tipo'])]],
+             [3.4*cm,3.0*cm,3.7*cm,3.7*cm,4.0*cm])
+        diferenca=(x['amo']-x['pop'])*fator
+        p('Interpretação: diferença amostra − população = '+br(diferenca,3)+' '+unidade+
+          '. O parâmetro populacional '+('está dentro' if x['cobre'] else 'está fora')+
+          ' do IC de 95%.','Pequeno')
+    h2('Visualização conjunta — comparação população × amostra')
     imagem(plot_comparacao(r,['P1','P2']));imagem(plot_comparacao(r,['M1','M2']))
     p('Os quatro intervalos incluem os valores populacionais conhecidos; a coincidência nesta amostra não garante cobertura em outras seleções.')
     h2('Testes de hipóteses — bilaterais, α = 5%')
@@ -399,7 +486,20 @@ def gerar_pdf(raiz: str|Path,incluir_graficos:bool=True,incluir_metodologia:bool
          'Rejeitar H0' if x['pv']<ALFA else 'Não rejeitar H0'] for c,x in r.items()],
         [1.7*cm,4.3*cm,3.3*cm,2.6*cm,5.9*cm])
     p('P1 e M2 foram rejeitados nos testes individuais; P2 e M1 não. Não rejeitar H0 não demonstra que o parâmetro seja igual à referência.')
-    for c,x in r.items():imagem(plot_teste(c,x))
+    h2('Curvas das estatísticas e interpretação dos quatro testes')
+    for c,x in r.items():
+        S.append(CondPageBreak(7*cm))
+        imagem(plot_teste(c,x))
+        crit=stats.norm.ppf(.975) if x['tipo']=='Proporção' else stats.t.ppf(.975,len(amo)-1)
+        ref=valor(x['h0'],x['tipo'])
+        dist='Z' if x['tipo']=='Proporção' else 't'
+        rel='ultrapassa' if abs(x['estat'])>crit else 'não ultrapassa'
+        conclusao='Rejeitar H0' if x['pv']<ALFA else 'Não rejeitar H0'
+        p(escape(c+': H0 = '+ref+'; '+dist+' observado = '+br(x['estat'],4)+
+                 '; limites críticos = ±'+br(crit,4)+'; valor-p bilateral = '+br(x['pv'],6)+
+                 '. A estatística '+rel+' o limite crítico. '+conclusao+
+                 ' no teste individual (α = 5%).'),'Pequeno')
+    p('O valor-p não é a probabilidade de H0 ser verdadeira. A decisão individual difere da decisão após Holm.','Pequeno')
 
     # SENSIBILIDADE E HOLM
     h1('5. Análises complementares')
@@ -409,7 +509,13 @@ def gerar_pdf(raiz: str|Path,incluir_graficos:bool=True,incluir_metodologia:bool
          br(x['apar'],4),br(x['po'],6),'<0,000001' if x['ps']<1e-6 else br(x['ps'],6)]
         for x in sens],[1.5*cm,2.7*cm,1.6*cm,2.2*cm,2.3*cm,2.5*cm,2.5*cm,2.5*cm])
     imagem(plot_sens(sens))
-    p('A exclusão da ocorrência extrema ID 716289 é um diagnóstico hipotético e não altera a amostra original. Em M1, a decisão individual mudaria após a exclusão; em M2, a rejeição permaneceria.')
+    p('A ocorrência extrema ID 716289 tem 76 pessoas envolvidas e 38 feridas. A exclusão foi simulada apenas para diagnóstico: os resultados oficiais continuam usando os 383 acidentes.')
+    for x in sens:
+        reducao=100*(x['orig']-x['sem'])/x['orig']
+        p(x['c']+': redução de '+br(reducao,2)+'% ('+br(x['orig']-x['sem'],4)+
+          ' pessoa(s) por acidente); média original '+br(x['orig'],4)+
+          ', média sem o máximo '+br(x['sem'],4)+'.','Pequeno')
+    p('A média aparada de 5% elimina aproximadamente 5% dos valores em cada extremidade, apenas para descrição. Em M1, a decisão individual mudaria após a exclusão; em M2, permaneceria. Não são testes confirmatórios.','Pequeno')
     h2('Comparações múltiplas — ajuste de Holm')
     tabela(['Teste','p original','p Holm','Decisão individual','Decisão Holm'],[
         [c,br(x['pv'],6),br(x['holm'],6),
@@ -417,14 +523,30 @@ def gerar_pdf(raiz: str|Path,incluir_graficos:bool=True,incluir_metodologia:bool
          'Rejeitar' if x['holm']<ALFA else 'Não rejeitar'] for c,x in r.items()],
         [1.5*cm,3*cm,2.9*cm,5.2*cm,5.2*cm])
     imagem(plot_holm(r))
-    p('As duas rejeições individuais não permanecem significativas após o ajuste de Holm para quatro comparações.')
+    h2('Por que nenhuma hipótese foi rejeitada após Holm?')
+    ordenados=sorted(r,key=lambda c:r[c]['pv'])
+    m=len(ordenados)
+    tabela(['Ordem','Teste','Valor-p','Limite sequencial','Situação'],[
+        [str(i+1),c,br(r[c]['pv'],6),br(ALFA/(m-i),6),
+         'Interromper; não rejeitar' if i==0 else 'Sem rejeição após parada']
+        for i,c in enumerate(ordenados)],
+        [1.5*cm,2*cm,3.2*cm,3.7*cm,7.4*cm])
+    p('O menor valor-p foi M2 = '+br(r['M2']['pv'],6)+
+      '. O primeiro limite de Holm é 0,05/4 = 0,012500. Como '+
+      br(r['M2']['pv'],6)+' > 0,012500, o procedimento interrompe as rejeições.','Pequeno')
+    imagem(plot_holm_ampliado(r))
+    p('P1 e M2 tinham valores-p individuais inferiores a 0,05, mas os ajustados são '+
+      br(r['P1']['holm'],6)+' e '+br(r['M2']['holm'],6)+
+      ', ambos superiores a 0,05. Nenhuma H0 é rejeitada após Holm.','Pequeno')
 
     # METODOLOGIA E CONCLUSAO
-    S.append(PageBreak());h1('6. Metodologia, limitações e referências')
+    S.append(CondPageBreak(6*cm));h1('6. Metodologia, limitações e referências')
     if incluir_metodologia:
         fpc=np.sqrt((len(pop)-len(amo))/(len(pop)-1))
         h2('Correção para população finita e procedimentos')
         p('FPC = raiz[(N − n)/(N − 1)] = '+br(fpc,6)+'. Intervalos de Wald e testes Z para proporções; testes e intervalos t de Student para médias (382 graus de liberdade). Os valores das hipóteses são referências exploratórias, não metas oficiais da PRF.')
+        p('IC de proporção = p estimada ± 1,959964 × raiz[p estimada × (1 − p estimada)/n] × FPC. IC de média = média ± t crítico × (desvio amostral/raiz(n)) × FPC.','Pequeno')
+        p('Os ICs utilizam o erro-padrão da estimativa amostral; os testes Z para proporção usam o erro-padrão calculado sob H0. O intervalo de confiança avalia faixas plausíveis, enquanto o teste avalia uma referência específica.','Pequeno')
         h2('Limitações e condições')
         p('A amostra foi aleatória simples sem reposição. A inferência baseia-se em aproximações; assimetria e valores extremos podem afetar sua adequação. Os resultados referem-se à população operacional registrada em 2025, e não necessariamente a ocorrências não registradas ou outros anos.')
         p('A presença dos parâmetros nos quatro intervalos observados não garante cobertura em futuras amostras. Gráficos de frequência e boxplots são descritivos; não equivalem a taxas de risco ajustadas à exposição ao tráfego.')
