@@ -1372,6 +1372,8 @@ with st.expander("Metodologia e limitações"):
         - Confiança: 95%.
         - Margem de erro: 5%.
         - Proporção conservadora: 50%.
+        - n₀ = 384,16; com correção para população finita, n = 382,14 → 383.
+        - Conferido na calculadora da SurveyMonkey (USP/Bauru indisponível).
 
         **Reprodutibilidade**
 

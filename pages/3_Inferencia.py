@@ -68,6 +68,13 @@ HIPOTESES = {
         "pergunta": (
             "A proporção de acidentes com pelo menos "
             "uma morte difere de 10%?"
+        ),
+        "justificativa": (
+            "Patamar de alerta de gravidade: se uma em cada "
+            "dez ocorrências tivesse ao menos uma morte, a "
+            "letalidade dos acidentes nas rodovias federais "
+            "seria considerada elevada. O teste verifica se a "
+            "amostra indica letalidade diferente desse patamar."
         )
     },
     "P2": {
@@ -78,6 +85,14 @@ HIPOTESES = {
         "pergunta": (
             "A proporção de acidentes registrados "
             "em plena noite difere de 30%?"
+        ),
+        "justificativa": (
+            "Referência de planejamento da fiscalização: a "
+            "plena noite tem menos tráfego, e uma participação "
+            "de cerca de 30% dos acidentes já justificaria "
+            "reforço das operações noturnas. O teste verifica "
+            "se a participação noturna difere desse patamar. "
+            "Sem dados de fluxo por período, não mede risco."
         )
     },
     "M1": {
@@ -88,6 +103,13 @@ HIPOTESES = {
         "pergunta": (
             "O número médio de pessoas envolvidas "
             "por acidente difere de três?"
+        ),
+        "justificativa": (
+            "Referência operacional: um acidente típico envolve "
+            "dois veículos com seus condutores e, com frequência, "
+            "um passageiro. Três pessoas por ocorrência é um "
+            "parâmetro usual para dimensionar o atendimento "
+            "(equipes, viaturas e ambulâncias)."
         )
     },
     "M2": {
@@ -98,6 +120,12 @@ HIPOTESES = {
         "pergunta": (
             "O número médio de pessoas feridas "
             "por acidente difere de uma?"
+        ),
+        "justificativa": (
+            "Referência de demanda de socorro: o teste verifica "
+            "se cada ocorrência gera, em média, um número de "
+            "feridos diferente de um, informação útil ao "
+            "planejamento do atendimento pré-hospitalar."
         )
     }
 }
@@ -1664,10 +1692,94 @@ if secao == "Visão geral":
         width="stretch"
     )
 
+    st.subheader(
+        "Decisões dos testes × valor real da população"
+    )
+
+    st.markdown(
+        "Como a população é conhecida, é possível "
+        "verificar se cada decisão tomada apenas com "
+        "a amostra foi correta."
+    )
+
+    linhas_decisao = []
+    for codigo in CODIGOS:
+        r = resultados[codigo]
+        h0_verdadeira = bool(
+            np.isclose(r["parametro"], r["h0"])
+        )
+        rej_ind = r["p"] < ALFA
+        rej_holm = r["p_holm"] < ALFA
+
+        def avaliar(rejeitou):
+            if h0_verdadeira:
+                return (
+                    "Erro tipo I" if rejeitou
+                    else "Correta"
+                )
+            return (
+                "Correta" if rejeitou
+                else "Erro tipo II"
+            )
+
+        linhas_decisao.append({
+            "Teste": codigo,
+            "Valor de H0": formatar_valor(
+                r["h0"], r["tipo"]
+            ),
+            "Valor real (população)": formatar_valor(
+                r["parametro"], r["tipo"]
+            ),
+            "H0 é verdadeira?": (
+                "Sim" if h0_verdadeira else "Não"
+            ),
+            "Decisão individual": decisao(r["p"]),
+            "Avaliação individual": avaliar(rej_ind),
+            "Decisão após Holm": decisao(r["p_holm"]),
+            "Avaliação após Holm": avaliar(rej_holm)
+        })
+
+    st.dataframe(
+        pd.DataFrame(linhas_decisao),
+        hide_index=True,
+        width="stretch"
+    )
+
+    st.markdown(
+        """
+        **Leitura:** nos quatro casos o valor real da
+        população é diferente do valor de H0, ou seja,
+        **as quatro hipóteses nulas são falsas**.
+
+        - **P1 e M2:** a amostra rejeitou H0, uma
+          **decisão correta**.
+        - **P2 e M1:** a amostra não rejeitou H0,
+          cometendo **erro tipo II** (não detectar
+          uma diferença que existe). As diferenças
+          reais (34,17% contra 30% e 2,597 contra 3)
+          são pequenas diante da variabilidade de uma
+          amostra de 383 registros; no M1, o valor
+          extremo de 76 pessoas também aumenta o
+          desvio-padrão e reduz o poder do teste.
+        - **Após Holm:** as quatro decisões passam a
+          ser erro tipo II. O controle mais rigoroso do
+          erro tipo I, com n = 383, reduz o poder dos
+          testes.
+
+        A não rejeição de H0 não prova que H0 é
+        verdadeira: indica apenas que a amostra não
+        trouxe evidência suficiente.
+        """
+    )
+
     st.subheader("Principais conclusões")
 
     st.markdown(
         """
+        **Decisões × população:** as quatro hipóteses
+        nulas são falsas na população; a amostra acertou
+        em P1 e M2 e cometeu erro tipo II em P2 e M1.
+
         **Intervalos de confiança:** os quatro
         intervalos de 95% incluíram os respectivos
         parâmetros populacionais conhecidos.
@@ -1870,6 +1982,11 @@ elif secao == "Testes de hipóteses":
                 h["evento"]
             )
 
+            st.write(
+                "**Justificativa do valor de H0:**",
+                h["justificativa"]
+            )
+
             if r["tipo"] == "Proporção":
                 st.latex(
                     rf"H_0:p={h['referencia']:.2f}"
@@ -1921,10 +2038,17 @@ elif secao == "Testes de hipóteses":
                     "para afirmar diferença da referência."
                 )
 
-            st.caption(
-                "A não rejeição não comprova "
-                "a igualdade proposta em H0."
-            )
+            if r["p"] < ALFA:
+                st.caption(
+                    "A rejeição indica evidência contra a "
+                    "referência, mas não mede a relevância "
+                    "prática da diferença."
+                )
+            else:
+                st.caption(
+                    "A não rejeição não comprova "
+                    "a igualdade proposta em H0."
+                )
 
     st.subheader(
         "Condições dos testes de proporção"
@@ -1960,6 +2084,17 @@ elif secao == "Testes de hipóteses":
         "feridos apresentam assimetria e valores "
         "extremos. Os resultados dos testes t "
         "devem considerar essas limitações."
+    )
+
+    st.info(
+        "Por que o teste t continua adequado: com n = 383, "
+        "pelo Teorema Central do Limite a distribuição da "
+        "média amostral é aproximadamente normal, mesmo com "
+        "as variáveis pessoas e feridos assimétricas. A "
+        "amostra é aleatória e representa 0,53% da população "
+        "(menos de 10%), o que garante a independência das "
+        "observações. A influência do valor extremo (76 "
+        "pessoas) é examinada na seção Sensibilidade."
     )
 
     st.divider()

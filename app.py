@@ -610,6 +610,26 @@ def mostrar_inicio():
             "de 5% e proporção conservadora de 50%."
         )
 
+        st.latex(
+            r"n_0=\frac{z^2\,p(1-p)}{e^2}"
+            r"=\frac{1{,}96^2\times0{,}5\times0{,}5}{0{,}05^2}"
+            r"=384{,}16"
+        )
+
+        st.latex(
+            r"n=\frac{n_0}{1+\frac{n_0-1}{N}}"
+            r"=\frac{384{,}16}{1+\frac{383{,}16}{72.529}}"
+            r"=382{,}14\;\rightarrow\;383"
+        )
+
+        st.caption(
+            "A calculadora sugerida (USP/Bauru) estava "
+            "indisponível no momento da consulta "
+            "(ERR_CONNECTION_TIMED_OUT). O resultado foi "
+            "conferido na calculadora da SurveyMonkey, "
+            "que também indicou 383 ocorrências."
+        )
+
     with m2:
 
         st.markdown(
@@ -857,6 +877,8 @@ def mostrar_inicio():
             - Confiança de 95%;
             - Margem de erro de referência de 5%;
             - Proporção conservadora de 50%.
+            - n₀ = 384,16; com correção para população finita, n = 382,14 → 383.
+            - Conferido na calculadora da SurveyMonkey (USP/Bauru indisponível).
 
             **Intervalos de confiança**
 
