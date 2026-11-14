@@ -551,12 +551,24 @@ def gerar_pdf(raiz: str|Path,incluir_graficos:bool=True,incluir_metodologia:bool
       br(r['P1']['holm'],6)+' e '+br(r['M2']['holm'],6)+
       ', ambos superiores a 0,05. Nenhuma H0 é rejeitada após Holm.','Pequeno')
 
+    h2('Decisões dos testes × valor real da população')
+    def _aval(h0_ok,rej):
+        return ('Erro tipo I' if rej else 'Correta') if h0_ok else ('Correta' if rej else 'Erro tipo II')
+    tabela(['Teste','H0','Valor real','H0 verdadeira?','Decisão individual','Avaliação','Avaliação após Holm'],[
+        [c,valor(x['h0'],x['tipo']),valor(x['pop'],x['tipo']),
+         'Sim' if np.isclose(x['pop'],x['h0']) else 'Não',
+         'Rejeitar H0' if x['pv']<ALFA else 'Não rejeitar H0',
+         _aval(np.isclose(x['pop'],x['h0']),x['pv']<ALFA),
+         _aval(np.isclose(x['pop'],x['h0']),x['holm']<ALFA)] for c,x in r.items()],
+        [1.4*cm,1.9*cm,2.1*cm,2.3*cm,3.3*cm,2.6*cm,3.2*cm],indivisivel=True)
+    p('Como a população é conhecida, verifica-se que as quatro hipóteses nulas são falsas. P1 e M2 tiveram decisões corretas; P2 e M1 resultaram em erro tipo II, pois as diferenças reais são pequenas diante da variabilidade de uma amostra de 383 registros (no M1, o valor extremo de 76 pessoas também eleva o desvio-padrão). Após Holm, as quatro decisões passam a ser erro tipo II: o controle mais rigoroso do erro tipo I reduz o poder dos testes.','Pequeno')
+
     # METODOLOGIA E CONCLUSAO
     S.append(CondPageBreak(6*cm));h1('6. Metodologia, limitações e referências')
     if incluir_metodologia:
         fpc=np.sqrt((len(pop)-len(amo))/(len(pop)-1))
         h2('Correção para população finita e procedimentos')
-        p('FPC = raiz[(N − n)/(N − 1)] = '+br(fpc,6)+'. Intervalos de Wald e testes Z para proporções; testes e intervalos t de Student para médias (382 graus de liberdade). Os valores das hipóteses são referências exploratórias, não metas oficiais da PRF.')
+        p('FPC = raiz[(N − n)/(N − 1)] = '+br(fpc,6)+'. Intervalos de Wald e testes Z para proporções; testes e intervalos t de Student para médias (382 graus de liberdade). Valores de H0: P1 = 10% (patamar de alerta de gravidade), P2 = 30% (referência para a fiscalização noturna), M1 = 3 pessoas e M2 = 1 ferido (referências para dimensionar o atendimento); não são metas oficiais da PRF. Com n = 383, pelo Teorema Central do Limite a média amostral é aproximadamente normal mesmo com as variáveis assimétricas, o que justifica o teste t; nas proporções, os sucessos e fracassos esperados sob H0 superam 10.')
         p('IC de proporção = p estimada ± 1,959964 × raiz[p estimada × (1 − p estimada)/n] × FPC. IC de média = média ± t crítico × (desvio amostral/raiz(n)) × FPC.','Pequeno')
         p('Os ICs utilizam o erro-padrão da estimativa amostral; os testes Z para proporção usam o erro-padrão calculado sob H0. O intervalo de confiança avalia faixas plausíveis, enquanto o teste avalia uma referência específica.','Pequeno')
         h2('Limitações e condições')
